@@ -1,0 +1,237 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\ArticleScan;
+use App\Models\PoLineItem;
+use App\Models\QcChecker;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class ArticleScanController extends Controller
+{
+    /** QC entry context: line item + PO + live counters + attempt history. */
+    public function context(string $token)
+    {
+        $line = PoLineItem::where('article_qr_token', $token)->with(['purchaseOrder', 'scans' => fn ($q) => $q->orderBy('id')])->firstOrFail();
+
+        return response()->json([
+            'type' => 'article',
+            'line_item' => $line,
+            'purchase_order' => $line->purchaseOrder,
+            'counters' => $line->counters(),
+            'status' => $line->status,
+            'history' => $line->scans,
+            'by_checker' => $this->breakdown($line, 'qc_checker_code'),
+            'by_line' => $this->breakdown($line, 'manufacturing_line_no'),
+        ]);
+    }
+
+    /**
+     * Record one QC scan: accepted + rework (re-queue) + scrap (terminal).
+     * Always appends — rework lots are re-scanned until
+     * sum(accepted) + sum(scrap) == order_qty.
+     */
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'article_token' => 'required|string',
+            'department' => 'required|string|max:50',
+            'qc_checker_code' => 'required|string|max:50',
+            'manufacturing_line_no' => 'nullable|string|max:50',
+            'production_shift' => 'nullable|string|max:50',
+            // Secondary details logged at internal scan of the supplier label.
+            'production_date' => 'nullable|date',
+            'production_unit_no' => 'nullable|string|max:50',
+            'production_supervisor_name' => 'nullable|string|max:255',
+            'air_wash_checker_code' => 'nullable|string|max:50',
+            'accepted_qty' => 'required|integer|min:0|max:100000',
+            'rework_qty' => 'required|integer|min:0|max:100000',
+            'scrap_qty' => 'required|integer|min:0|max:100000',
+            'notes' => 'nullable|string',
+            'client_uuid' => 'nullable|string|max:64',
+            'tested_at' => 'nullable|date',
+        ]);
+
+        // Two-role workflow: an admin may scan only to attach secondary
+        // production details (zero quantities), while the tester records the
+        // Pass/Repair/Reject verdict. A row is junk only if it carries
+        // neither quantities nor any production detail.
+        $hasDetails = !empty($data['manufacturing_line_no'])
+            || !empty($data['production_shift'])
+            || !empty($data['production_date'])
+            || !empty($data['production_unit_no'])
+            || !empty($data['production_supervisor_name'])
+            || !empty($data['air_wash_checker_code'])
+            || !empty($data['notes']);
+        if (($data['accepted_qty'] + $data['rework_qty'] + $data['scrap_qty']) < 1 && !$hasDetails) {
+            return response()->json(['message' => 'Enter quantities or production details'], 422);
+        }
+
+        if (!empty($data['client_uuid'])) {
+            $existing = ArticleScan::where('client_uuid', $data['client_uuid'])->first();
+            if ($existing) {
+                $line = $existing->lineItem;
+                return response()->json(array_merge(
+                    $existing->load('lineItem')->toArray(),
+                    ['counters' => $line->counters(), 'status' => $line->status]
+                ), 200);
+            }
+        }
+
+        $checker = QcChecker::where('checker_code', $data['qc_checker_code'])->where('active', true)->first();
+        if (!$checker) {
+            return response()->json(['message' => 'Invalid checker code '.$data['qc_checker_code'].' — create it in Admin → Testers first'], 422);
+        }
+
+        // Air-wash QC checker must also be a valid active tester when provided.
+        $airWash = null;
+        if (!empty($data['air_wash_checker_code'])) {
+            $airWash = QcChecker::where('checker_code', $data['air_wash_checker_code'])->where('active', true)->first();
+            if (!$airWash) {
+                return response()->json(['message' => 'Invalid air-wash checker code '.$data['air_wash_checker_code'].' — create it in Admin → Testers first'], 422);
+            }
+        }
+
+        $line = PoLineItem::where('article_qr_token', $data['article_token'])->firstOrFail();
+
+        return DB::transaction(function () use ($data, $line, $checker, $airWash) {
+            $accepted = (int) $line->scans()->sum('accepted_qty');
+            $scrap = (int) $line->scans()->sum('scrap_qty');
+
+            // Rework is re-queueable so it never consumes the cap; accepted+scrap must fit.
+            if ($accepted + $scrap + $data['accepted_qty'] + $data['scrap_qty'] > $line->order_qty) {
+                abort(422, 'Accepted + scrap would exceed order qty '.$line->order_qty.' (already accepted '.$accepted.', scrap '.$scrap.')');
+            }
+
+            $scan = ArticleScan::create([
+                'po_line_item_id' => $line->id,
+                'department' => $data['department'],
+                'qc_checker_code' => $checker->checker_code,
+                'qc_checker_name' => $checker->name,
+                'manufacturing_line_no' => $data['manufacturing_line_no'] ?? null,
+                'production_shift' => $data['production_shift'] ?? null,
+                'production_date' => $data['production_date'] ?? now()->toDateString(),
+                'production_unit_no' => $data['production_unit_no'] ?? null,
+                'production_supervisor_name' => $data['production_supervisor_name'] ?? null,
+                'air_wash_checker_code' => $airWash?->checker_code,
+                'air_wash_checker_name' => $airWash?->name,
+                'accepted_qty' => $data['accepted_qty'],
+                'rework_qty' => $data['rework_qty'],
+                'scrap_qty' => $data['scrap_qty'],
+                'notes' => $data['notes'] ?? null,
+                'client_uuid' => $data['client_uuid'] ?? null,
+                'tested_at' => $data['tested_at'] ?? now(),
+            ]);
+
+            $line->refreshStatus();
+
+            return response()->json(array_merge(
+                $scan->load('lineItem')->toArray(),
+                ['counters' => $line->counters(), 'status' => $line->status]
+            ), 201);
+        });
+    }
+
+    /**
+     * Staff-only correction: edit an existing scan row (e.g. wrong qty or
+     * wrong secondary details). Fields come prefilled in the UI, so nothing
+     * needs re-entering — change only what's wrong and save.
+     * Cap is re-checked against all OTHER scans, then counters refreshed.
+     */
+    public function update(Request $request, ArticleScan $scan)
+    {
+        $data = $request->validate([
+            'department' => 'sometimes|required|string|max:50',
+            'qc_checker_code' => 'sometimes|required|string|max:50',
+            'manufacturing_line_no' => 'nullable|string|max:50',
+            'production_shift' => 'nullable|string|max:50',
+            'production_date' => 'nullable|date',
+            'production_unit_no' => 'nullable|string|max:50',
+            'production_supervisor_name' => 'nullable|string|max:255',
+            'air_wash_checker_code' => 'nullable|string|max:50',
+            'accepted_qty' => 'sometimes|required|integer|min:0|max:100000',
+            'rework_qty' => 'sometimes|required|integer|min:0|max:100000',
+            'scrap_qty' => 'sometimes|required|integer|min:0|max:100000',
+            'notes' => 'nullable|string',
+        ]);
+
+        $line = $scan->lineItem;
+
+        if (array_key_exists('qc_checker_code', $data)) {
+            $checker = QcChecker::where('checker_code', $data['qc_checker_code'])->where('active', true)->first();
+            if (!$checker) {
+                return response()->json(['message' => 'Invalid checker code '.$data['qc_checker_code'].' — create it in Admin → Testers first'], 422);
+            }
+            $scan->qc_checker_code = $checker->checker_code;
+            $scan->qc_checker_name = $checker->name;
+        }
+
+        if (array_key_exists('air_wash_checker_code', $data)) {
+            if (empty($data['air_wash_checker_code'])) {
+                $scan->air_wash_checker_code = null;
+                $scan->air_wash_checker_name = null;
+            } else {
+                $airWash = QcChecker::where('checker_code', $data['air_wash_checker_code'])->where('active', true)->first();
+                if (!$airWash) {
+                    return response()->json(['message' => 'Invalid air-wash checker code '.$data['air_wash_checker_code'].' — create it in Admin → Testers first'], 422);
+                }
+                $scan->air_wash_checker_code = $airWash->checker_code;
+                $scan->air_wash_checker_name = $airWash->name;
+            }
+        }
+
+        foreach (['department', 'manufacturing_line_no', 'production_shift', 'production_date', 'production_unit_no', 'production_supervisor_name', 'notes'] as $f) {
+            if (array_key_exists($f, $data)) {
+                $scan->{$f} = $data[$f];
+            }
+        }
+        foreach (['accepted_qty', 'rework_qty', 'scrap_qty'] as $f) {
+            if (array_key_exists($f, $data)) {
+                $scan->{$f} = $data[$f];
+            }
+        }
+
+        if (($scan->accepted_qty + $scan->rework_qty + $scan->scrap_qty) < 1) {
+            return response()->json(['message' => 'Enter at least one quantity greater than zero'], 422);
+        }
+
+        // Re-check the cap excluding this row's old values.
+        $otherAccepted = (int) $line->scans()->where('id', '!=', $scan->id)->sum('accepted_qty');
+        $otherScrap = (int) $line->scans()->where('id', '!=', $scan->id)->sum('scrap_qty');
+        if ($otherAccepted + $otherScrap + $scan->accepted_qty + $scan->scrap_qty > $line->order_qty) {
+            return response()->json(['message' => 'Accepted + scrap would exceed order qty '.$line->order_qty.' (other scans already accepted '.$otherAccepted.', scrap '.$otherScrap.')'], 422);
+        }
+
+        $scan->save();
+        $line->refreshStatus();
+
+        return response()->json(array_merge(
+            $scan->load('lineItem')->toArray(),
+            ['counters' => $line->counters(), 'status' => $line->status]
+        ));
+    }
+
+    private function breakdown(PoLineItem $line, string $column): array
+    {
+        return $line->scans()
+            ->selectRaw($column.' as grp, SUM(accepted_qty) as accepted, SUM(rework_qty) as rework, SUM(scrap_qty) as scrap, COUNT(*) as scans')
+            ->groupBy($column)
+            ->get()
+            ->map(function ($r) use ($line) {
+                $total = ((int) $r->accepted) + ((int) $r->rework) + ((int) $r->scrap);
+                $scanned = max(1, $total);
+
+                return [
+                    'key' => $r->grp ?: '—',
+                    'accepted' => (int) $r->accepted,
+                    'rework' => (int) $r->rework,
+                    'scrap' => (int) $r->scrap,
+                    'scans' => (int) $r->scans,
+                    'pass_pct' => round((((int) $r->accepted) / $scanned) * 100, 1),
+                    'fail_pct' => round((((int) $r->rework + (int) $r->scrap) / $scanned) * 100, 1),
+                ];
+            })->values()->all();
+    }
+}

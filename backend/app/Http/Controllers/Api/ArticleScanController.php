@@ -7,14 +7,32 @@ use App\Models\ArticleScan;
 use App\Models\PoLineItem;
 use App\Models\QcChecker;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class ArticleScanController extends Controller
 {
     /** QC entry context: line item + PO + live counters + attempt history. */
-    public function context(string $token)
+    public function context(Request $request, string $token)
     {
         $line = PoLineItem::where('article_qr_token', $token)->with(['purchaseOrder', 'scans' => fn ($q) => $q->orderBy('id')])->firstOrFail();
+
+        // Tester isolation (§7): staff sees everything; a tester sees only
+        // their own rows; anonymous sees meta + counters only. Counters stay
+        // global — the verdict math needs the true pending balance.
+        [$staff, $checker] = $this->resolveViewer($request);
+        $history = $line->scans;
+        $byChecker = $this->breakdown($line, 'qc_checker_code');
+        if (!$staff) {
+            if ($checker) {
+                $history = $history->filter(fn ($s) => $s->qc_checker_code === $checker->checker_code
+                    || $s->air_wash_checker_code === $checker->checker_code)->values();
+                $byChecker = array_values(array_filter($byChecker, fn ($r) => $r['key'] === $checker->checker_code));
+            } else {
+                $history = [];
+                $byChecker = [];
+            }
+        }
 
         return response()->json([
             'type' => 'article',
@@ -22,8 +40,8 @@ class ArticleScanController extends Controller
             'purchase_order' => $line->purchaseOrder,
             'counters' => $line->counters(),
             'status' => $line->status,
-            'history' => $line->scans,
-            'by_checker' => $this->breakdown($line, 'qc_checker_code'),
+            'history' => $history,
+            'by_checker' => $byChecker,
             'by_line' => $this->breakdown($line, 'manufacturing_line_no'),
             // Active testers for the QC/air-wash dropdowns (public: codes are
             // floor identity, not secrets — same list Admin → Testers manages).
@@ -237,5 +255,22 @@ class ArticleScanController extends Controller
                     'fail_pct' => round((((int) $r->rework + (int) $r->scrap) / $scanned) * 100, 1),
                 ];
             })->values()->all();
+    }
+
+    /**
+     * Who is asking: [staff, checker]. Staff = valid Sanctum token.
+     * Tester = X-Device-Token matching an active checker. Else anonymous.
+     */
+    private function resolveViewer(Request $request): array
+    {
+        if (Auth::guard('sanctum')->user()) {
+            return [true, null];
+        }
+        $token = (string) $request->header('X-Device-Token', '');
+        $checker = $token !== ''
+            ? QcChecker::where('device_token', $token)->where('active', true)->first()
+            : null;
+
+        return [false, $checker];
     }
 }

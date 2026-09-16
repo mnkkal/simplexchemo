@@ -48,9 +48,23 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
   };
 
   const load = async (first = false) => {
+    // Tester isolation (§7): staff sees full history; a tester sees only
+    // their own rows. The server redacts live responses — this also covers
+    // data served from the offline cache of a previous session.
+    const scopeToViewer = (c: any) => {
+      if (!c || typeof window === 'undefined') return c;
+      if (localStorage.getItem('staff_token')) return c;
+      const mine = getCheckerCode();
+      if (!mine) return { ...c, history: [], by_checker: [] };
+      return {
+        ...c,
+        history: (c.history || []).filter((h: any) => h.qc_checker_code === mine || h.air_wash_checker_code === mine),
+        by_checker: (c.by_checker || []).filter((r: any) => r.key === mine),
+      };
+    };
     try {
       const c = await api.articleContext(token);
-      setCtx(c); cacheSet(`article:${token}`, c);
+      setCtx(scopeToViewer(c)); cacheSet(`article:${token}`, c);
       if (first) {
         const hist = c.history || [];
         prefillFrom(hist[hist.length - 1]);
@@ -59,7 +73,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
     } catch (ex: any) {
       const cached = await cacheGet(`article:${token}`);
       if (cached) {
-        setCtx(cached); setErr('Offline — showing cached article details.');
+        setCtx(scopeToViewer(cached)); setErr('Offline — showing cached article details.');
         if (first) {
           const hist = cached.history || [];
           prefillFrom(hist[hist.length - 1]);

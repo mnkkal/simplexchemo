@@ -7,19 +7,30 @@ use App\Models\QcChecker;
 use App\Models\QcRound;
 use App\Models\Unit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class QcController extends Controller
 {
     /** Staff QC entry context: unit + order + which round is open. */
-    public function context(string $token)
+    public function context(Request $request, string $token)
     {
         $unit = Unit::where('unit_qr_token', $token)->with(['order', 'qcRounds' => fn ($q) => $q->orderBy('attempt_number')])->firstOrFail();
+
+        // Tester isolation (§7): staff sees all rounds; a tester sees only
+        // their own; anonymous sees meta + current round only.
+        [$staff, $checker] = $this->resolveViewer($request);
+        $rounds = $unit->qcRounds;
+        if (!$staff) {
+            $rounds = $checker
+                ? $rounds->filter(fn ($r) => $r->qc_checker_code === $checker->checker_code)->values()
+                : [];
+        }
 
         return response()->json([
             'unit' => $unit,
             'order' => $unit->order,
             'current_round' => $unit->currentRound(),
-            'rounds' => $unit->qcRounds,
+            'rounds' => $rounds,
         ]);
     }
 
@@ -95,5 +106,22 @@ class QcController extends Controller
         $unit->refreshStatus();
 
         return response()->json($round->load('unit'), 201);
+    }
+
+    /**
+     * Who is asking: [staff, checker]. Staff = valid Sanctum token.
+     * Tester = X-Device-Token matching an active checker. Else anonymous.
+     */
+    private function resolveViewer(Request $request): array
+    {
+        if (Auth::guard('sanctum')->user()) {
+            return [true, null];
+        }
+        $token = (string) $request->header('X-Device-Token', '');
+        $checker = $token !== ''
+            ? QcChecker::where('device_token', $token)->where('active', true)->first()
+            : null;
+
+        return [false, $checker];
     }
 }

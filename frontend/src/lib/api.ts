@@ -7,6 +7,12 @@ function authHeaders(): HeadersInit {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+function deviceHeader(): HeadersInit {
+  if (typeof window === 'undefined') return {};
+  const t = localStorage.getItem('device_token');
+  return t ? { 'X-Device-Token': t } : {};
+}
+
 async function req(path: string, init?: RequestInit) {
   const res = await fetch(`${API}${path}`, {
     ...init,
@@ -30,11 +36,11 @@ export const api = {
   purchaseOrder: (id: string) => req(`/purchase-orders/${id}`),
   poLabels: (id: string) => req(`/purchase-orders/${id}/labels`, { method: 'POST' }),
   // Article QC (accepted / rework / scrap counts per scan)
-  articleContext: (token: string) => req(`/articles/${token}`),
+  articleContext: (token: string) => req(`/articles/${token}`, { headers: deviceHeader() }),
   submitArticleScan: (data: any) => req('/article-scans', { method: 'POST', body: JSON.stringify(data) }),
   updateArticleScan: (id: number, data: any) => req(`/article-scans/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   // QC
-  qcContext: (token: string) => req(`/qc/${token}`),
+  qcContext: (token: string) => req(`/qc/${token}`, { headers: deviceHeader() }),
   submitQc: (data: any) => req('/qc', { method: 'POST', body: JSON.stringify(data) }),
   // Pallets
   createPallet: (data: any) => req('/pallets', { method: 'POST', body: JSON.stringify(data) }),
@@ -44,7 +50,7 @@ export const api = {
   scan: (token: string, staff = false) => req(`/scan/${token}${staff ? '?staff=1' : ''}`),
   // Tester self-service (device-token auth, own work only)
   testerWork: (checker_code: string) => req(`/tester/${encodeURIComponent(checker_code)}/work`, {
-    headers: { 'X-Device-Token': (typeof window !== 'undefined' ? localStorage.getItem('device_token') : '') || '' },
+    headers: deviceHeader(),
   }),
   // Checkers
   verifyChecker: (checker_code: string) => req('/checkers/verify', { method: 'POST', body: JSON.stringify({ checker_code }) }),

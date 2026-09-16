@@ -238,10 +238,28 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
                 </select>
               </label>
               <label className="block text-sm">QC tester code
-                <input value={code} onChange={(e) => setCode(e.target.value)} className="mt-1 w-full border p-2" placeholder="e.g. T01" />
+                {(ctx.testers || []).length > 0 ? (
+                  <select value={code} onChange={(e) => setCode(e.target.value)} className="mt-1 w-full border p-2">
+                    <option value="">— Select tester —</option>
+                    {(ctx.testers || []).map((t: any) => (
+                      <option key={t.id} value={t.checker_code}>{t.name} ({t.checker_code})</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input value={code} onChange={(e) => setCode(e.target.value)} className="mt-1 w-full border p-2" placeholder="e.g. 001" />
+                )}
               </label>
               <label className="block text-sm">Air-wash checker code
-                <input value={airWashCode} onChange={(e) => setAirWashCode(e.target.value)} className="mt-1 w-full border p-2" placeholder="e.g. T02" />
+                {(ctx.testers || []).length > 0 ? (
+                  <select value={airWashCode} onChange={(e) => setAirWashCode(e.target.value)} className="mt-1 w-full border p-2">
+                    <option value="">— None —</option>
+                    {(ctx.testers || []).map((t: any) => (
+                      <option key={t.id} value={t.checker_code}>{t.name} ({t.checker_code})</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input value={airWashCode} onChange={(e) => setAirWashCode(e.target.value)} className="mt-1 w-full border p-2" placeholder="e.g. 002" />
+                )}
               </label>
             </div>
             <button className="border px-4 py-2">Save details (no quantities)</button>

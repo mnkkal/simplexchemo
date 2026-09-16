@@ -58,9 +58,11 @@ export default function Admin() {
     } catch (ex: any) { setErr(ex.message); }
   };
 
-  const saveAssignment = async (c: any) => {
+  const saveTester = async (c: any) => {
     try {
       const updated = await api.updateChecker(c.id, {
+        name: c.name,
+        checker_code: c.checker_code,
         production_line_no: c.production_line_no || null,
         production_shift: c.production_shift || null,
       });
@@ -164,16 +166,18 @@ export default function Admin() {
           <input value={checker.production_shift} onChange={(e) => setChecker({ ...checker, production_shift: e.target.value })} placeholder="Shift e.g. A" className="border p-2" />
           <button className="border px-4">Add</button>
         </form>
-        <table className="mt-2 w-full max-w-3xl border text-sm">
-          <thead><tr className="bg-slate-100"><th className="border p-1">Tester</th><th className="border p-1">Line</th><th className="border p-1">Shift</th><th className="border p-1">Status</th><th className="border p-1">Actions</th></tr></thead>
+        <table className="mt-2 w-full max-w-5xl border text-sm">
+          <thead><tr className="bg-slate-100"><th className="border p-1">Tester name</th><th className="border p-1">Code</th><th className="border p-1">Line</th><th className="border p-1">Shift</th><th className="border p-1">Status</th><th className="border p-1">Since</th><th className="border p-1">Actions</th></tr></thead>
           <tbody>{checkers.map((c: any) => (
             <tr key={c.id}>
-              <td className="border p-1">{c.name} ({c.checker_code})</td>
+              <td className="border p-1"><input value={c.name || ''} onChange={(e) => setCheckers((list) => list.map((x) => (x.id === c.id ? { ...x, name: e.target.value } : x)))} className="w-28 border p-1" /></td>
+              <td className="border p-1"><input value={c.checker_code || ''} onChange={(e) => setCheckers((list) => list.map((x) => (x.id === c.id ? { ...x, checker_code: e.target.value } : x)))} className="w-20 border p-1" /></td>
               <td className="border p-1"><input value={c.production_line_no || ''} onChange={(e) => setCheckers((list) => list.map((x) => (x.id === c.id ? { ...x, production_line_no: e.target.value } : x)))} placeholder="L2" className="w-20 border p-1" /></td>
               <td className="border p-1"><input value={c.production_shift || ''} onChange={(e) => setCheckers((list) => list.map((x) => (x.id === c.id ? { ...x, production_shift: e.target.value } : x)))} placeholder="A" className="w-16 border p-1" /></td>
               <td className="border p-1">{c.active ? 'active' : 'inactive'}</td>
+              <td className="border p-1">{c.created_at ? String(c.created_at).slice(0, 10) : '—'}</td>
               <td className="border p-1 space-x-1">
-                <button onClick={() => saveAssignment(c)} className="border px-2">Save</button>
+                <button onClick={() => saveTester(c)} className="border px-2">Save</button>
                 <button onClick={() => toggleChecker(c)} className="border px-2">{c.active ? 'Deactivate' : 'Activate'}</button>
                 <button onClick={() => removeChecker(c)} className="border px-2 text-red-600">Remove</button>
               </td>

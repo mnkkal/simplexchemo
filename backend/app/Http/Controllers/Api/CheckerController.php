@@ -25,12 +25,13 @@ class CheckerController extends Controller
         return response()->json(QcChecker::create($data + ['active' => true]), 201);
     }
 
-    /** Admin-only: activate/deactivate + reassign tester line/shift. */
+    /** Admin-only: rename tester, change code, activate/deactivate, reassign line/shift. */
     public function update(Request $request, QcChecker $checker)
     {
         $data = $request->validate([
             'active' => 'sometimes|required|boolean',
             'name' => 'sometimes|required|string|max:255',
+            'checker_code' => 'sometimes|required|string|max:50|unique:qc_checkers,checker_code,'.$checker->id,
             'production_line_no' => 'nullable|string|max:50',
             'production_shift' => 'nullable|string|max:50',
         ]);

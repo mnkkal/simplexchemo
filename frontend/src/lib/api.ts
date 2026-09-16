@@ -50,7 +50,7 @@ export const api = {
   verifyChecker: (checker_code: string) => req('/checkers/verify', { method: 'POST', body: JSON.stringify({ checker_code }) }),
   checkers: () => req('/checkers'),
   createChecker: (data: any) => req('/checkers', { method: 'POST', body: JSON.stringify(data) }),
-  updateChecker: (id: number, data: { active?: boolean; name?: string; production_line_no?: string | null; production_shift?: string | null }) => req(`/checkers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  updateChecker: (id: number, data: { active?: boolean; name?: string; checker_code?: string; production_line_no?: string | null; production_shift?: string | null }) => req(`/checkers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteChecker: (id: number) => req(`/checkers/${id}`, { method: 'DELETE' }),
   // Dashboard / export
   dashboard: () => req('/dashboard'),

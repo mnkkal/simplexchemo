@@ -25,6 +25,10 @@ class ArticleScanController extends Controller
             'history' => $line->scans,
             'by_checker' => $this->breakdown($line, 'qc_checker_code'),
             'by_line' => $this->breakdown($line, 'manufacturing_line_no'),
+            // Active testers for the QC/air-wash dropdowns (public: codes are
+            // floor identity, not secrets — same list Admin → Testers manages).
+            'testers' => QcChecker::where('active', true)->orderBy('name')
+                ->get(['id', 'name', 'checker_code', 'production_line_no', 'production_shift']),
         ]);
     }
 

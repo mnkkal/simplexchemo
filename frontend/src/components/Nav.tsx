@@ -50,8 +50,10 @@ export default function Nav() {
           </>
         ) : tester ? (
           <>
-            <Link href="/tester/dashboard" className="text-sm opacity-90 hover:opacity-100">My work</Link>
-            <Link href="/tester" className="text-sm opacity-90 hover:opacity-100">Tester login</Link>
+            <Link href="/tester/dashboard#scan" className="text-sm opacity-90 hover:opacity-100">📷 Scan</Link>
+            <Link href="/tester/dashboard#queue" className="text-sm opacity-90 hover:opacity-100">Queue</Link>
+            <Link href="/tester/dashboard#history" className="text-sm opacity-90 hover:opacity-100">History</Link>
+            <Link href="/tester/dashboard#profile" className="text-sm opacity-90 hover:opacity-100">Profile</Link>
             <span title="Tester session active on this browser" className="rounded bg-amber-600 px-2 py-0.5 text-xs">Tester: {testerName ? `${testerName} (${tester})` : tester}</span>
           </>
         ) : (

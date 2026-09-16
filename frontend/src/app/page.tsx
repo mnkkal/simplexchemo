@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { saveChecker } from '@/lib/checker';
-import { TokenInput } from '@/components/Qr';
+import { TokenInput, extractToken } from '@/components/Qr';
 import QrScanner from '@/components/QrScanner';
 
 const STEPS = [
@@ -34,8 +34,8 @@ export default function Home() {
     router.push(`/scan/${encodeURIComponent(t)}`);
   };
   const fromScan = (text: string) => {
-    const m = text.match(/scan\/([A-Za-z0-9]+)/);
-    go(m ? m[1] : text.trim());
+    const t = extractToken(text);
+    if (t) go(t);
   };
 
   const staffLogin = async (e: React.FormEvent) => {
@@ -44,6 +44,7 @@ export default function Home() {
     try {
       const r = await api.login(email, password);
       localStorage.setItem('staff_token', r.token);
+      localStorage.setItem('staff_user', r.user?.email || email);
       router.push('/admin');
     } catch (ex: any) { setErr(ex.message); }
   };

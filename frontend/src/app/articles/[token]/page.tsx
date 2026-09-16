@@ -23,8 +23,9 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
   const [unitNo, setUnitNo] = useState('');
   const [supervisor, setSupervisor] = useState('');
   const [airWashCode, setAirWashCode] = useState('');
-  // Tester verdict: quantity + chosen remark + remark text.
-  const [verdictQty, setVerdictQty] = useState(0);
+  // Tester verdict: quantity (one unit per scan — defaults to 1 so a tap
+  // never wipes the whole pending balance) + chosen remark + remark text.
+  const [verdictQty, setVerdictQty] = useState(1);
   const [pendingVerdict, setPendingVerdict] = useState<'repair' | 'reject' | null>(null);
   const [remark, setRemark] = useState('');
   const [isStaff, setIsStaff] = useState(false);
@@ -50,7 +51,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
       if (first) {
         const hist = c.history || [];
         prefillFrom(hist[hist.length - 1]);
-        setVerdictQty(c.counters?.pending ?? 0);
+        setVerdictQty(1);
       }
     } catch (ex: any) {
       const cached = await cacheGet(`article:${token}`);
@@ -59,7 +60,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
         if (first) {
           const hist = cached.history || [];
           prefillFrom(hist[hist.length - 1]);
-          setVerdictQty(cached.counters?.pending ?? 0);
+          setVerdictQty(1);
         }
       }
       else setErr(ex.message);
@@ -98,6 +99,11 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
     if (!qty || qty < 1) { setErr('Enter quantity ≥ 1.'); return; }
     if (qty > pending) { setErr(`Only ${pending} pending — quantity can't exceed it.`); return; }
     if (v !== 'pass' && !remarkText.trim()) { setErr('Add a remark for Repair / Reject.'); return; }
+    // Safety: Passing/Rejecting the whole balance finishes the article and
+    // can't be undone (only staff can correct via Edit) — confirm explicitly.
+    if ((v === 'pass' || v === 'reject') && pending > 1 && qty >= pending) {
+      if (!window.confirm(`Record ${qty} and finish this article (pending becomes 0)? This can't be undone.`)) return;
+    }
     const payload = {
       ...basePayload(),
       accepted_qty: v === 'pass' ? qty : 0,
@@ -111,7 +117,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
       const label = v === 'pass' ? 'Pass' : v === 'repair' ? 'Repair' : 'Reject';
       setMsg(`Recorded ${label} ${qty} ✓ Now: accepted ${r.counters.accepted}, pending ${r.counters.pending}.`);
       setPendingVerdict(null); setRemark('');
-      setVerdictQty(r.counters.pending);
+      setVerdictQty(1);
       await load();
     } catch (ex: any) {
       if (!navigator.onLine || /fetch|network|Failed/i.test(ex.message)) {
@@ -153,7 +159,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
         Accepted <b>{c.accepted} ({pct(c.accepted)}%)</b> · Rework <b>{c.rework}</b> · Scrap <b>{c.scrap} ({pct(c.scrap)}%)</b> · Pending <b>{c.pending}</b>
       </div>
       {err && <p className="text-sm text-red-600">{err}</p>}
-      {msg && <p className="text-sm text-green-700">{msg}</p>}
+      {msg && <p className="text-sm text-green-700">{msg}{testerSession && (<> <Link href="/tester/dashboard#scan" className="underline">Scan next QR →</Link></>)}</p>}
       <div className="grid gap-3 text-sm sm:grid-cols-2">
         <div className="border bg-white p-3"><b>By tester</b>{(ctx.by_checker || []).map((r: any) => (
           <div key={r.key} className="border-b py-1">{r.key}: ✓{r.accepted} · RW{r.rework} · S{r.scrap} → {r.pass_pct}% pass</div>

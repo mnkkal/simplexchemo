@@ -50,15 +50,27 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
   // Tester isolation (§7): staff sees full history; a tester sees only
   // their own rows. The server redacts live responses — this also covers
   // data served from the offline cache of a previous session.
+  // Also normalizes pre-levels cached payloads (no qc/airwash/stage keys).
   const scopeToViewer = (c: any) => {
     if (!c || typeof window === 'undefined') return c;
+    if (c.stage === undefined || !c.qc || !c.airwash) {
+      const legacyComplete = !!c.complete;
+      c = {
+        ...c, by_airwash: c.by_airwash || [],
+        stage: legacyComplete ? 'airwash' : 'qc',
+        qc: { accepted: c.accepted || 0, rework: c.rework || 0, scrap: c.scrap || 0, pending: c.pending || 0, complete: legacyComplete },
+        airwash: { accepted: 0, rework: 0, scrap: 0, pending: 0, complete: false },
+        complete: false,
+      };
+    }
     if (localStorage.getItem('staff_token')) return c;
     const mine = getCheckerCode();
-    if (!mine) return { ...c, history: [], by_checker: [] };
+    if (!mine) return { ...c, history: [], by_checker: [], by_airwash: [] };
     return {
       ...c,
       history: (c.history || []).filter((h: any) => h.qc_checker_code === mine || h.air_wash_checker_code === mine),
       by_checker: (c.by_checker || []).filter((r: any) => r.key === mine),
+      by_airwash: (c.by_airwash || []).filter((r: any) => r.key === mine),
     };
   };
 
@@ -194,10 +206,18 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
         PO {ctx.purchase_order.purchase_order_no} · Line {ctx.line_item.line_number} · {ctx.line_item.bag_size} · Order {ctx.line_item.order_qty}<br />
         Accepted <b>{c.accepted} ({pct(c.accepted)}%)</b> · Rework <b>{c.rework}</b> · Scrap <b>{c.scrap} ({pct(c.scrap)}%)</b> · Pending <b>{c.pending}</b>
       </div>
+      <div className="border bg-white p-3 text-sm">
+        <b>Level 1 · QC:</b> ✓{c.qc.accepted}/{ctx.line_item.order_qty} · RW{c.qc.rework} · S{c.qc.scrap} {c.qc.complete ? '✅' : <>· pending <b>{c.qc.pending}</b></>}<br />
+        <b>Level 2 · Air-wash:</b> ✓{c.airwash.accepted}/{ctx.line_item.order_qty} · RW{c.airwash.rework} · S{c.airwash.scrap} {c.airwash.complete ? '✅' : <>· pending <b>{c.airwash.pending}</b></>}
+        {!c.complete && <div className="mt-1">Recording verdict as: <b>{c.stage === 'airwash' ? 'Air-wash (QC done ✓)' : 'QC'}</b></div>}
+      </div>
       {err && <p className="text-sm text-red-600">{err}</p>}
       {msg && <p className="text-sm text-green-700">{msg}{testerSession && (<> <Link href="/tester/dashboard#scan" className="underline">Scan next QR →</Link></>)}</p>}
       <div className="grid gap-3 text-sm sm:grid-cols-2">
-        <div className="border bg-white p-3"><b>By tester</b>{(ctx.by_checker || []).map((r: any) => (
+        <div className="border bg-white p-3"><b>By tester (QC)</b>{(ctx.by_checker || []).map((r: any) => (
+          <div key={r.key} className="border-b py-1">{r.key}: ✓{r.accepted} · RW{r.rework} · S{r.scrap} → {r.pass_pct}% pass</div>
+        ))}</div>
+        <div className="border bg-white p-3"><b>By air-wash tester</b>{(ctx.by_airwash || []).map((r: any) => (
           <div key={r.key} className="border-b py-1">{r.key}: ✓{r.accepted} · RW{r.rework} · S{r.scrap} → {r.pass_pct}% pass</div>
         ))}</div>
         <div className="border bg-white p-3"><b>By mfg line</b>{(ctx.by_line || []).map((r: any) => (
@@ -247,7 +267,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
 
       {c.complete && (
         <div className="border border-green-600 bg-green-50 p-4 text-sm">
-          <b>✅ Article complete — no further entry needed.</b> Accepted {c.accepted} + Scrap {c.scrap} = Order {ctx.line_item.order_qty}, pending 0.
+          <b>✅ Article complete — both levels done, no further entry needed.</b> QC ✓{c.qc.accepted} S{c.qc.scrap} · Air-wash ✓{c.airwash.accepted} S{c.airwash.scrap} (order {ctx.line_item.order_qty}).
           To fix anything, use <b>Edit</b> on the history row above (staff only).
         </div>
       )}
@@ -330,7 +350,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
 
       <div className="text-sm"><b>History (never overwritten):</b>
         {(ctx.history || []).map((h: any) => (
-          <div key={h.id} className="border-b py-1">[{h.department}]{h.production_date ? ` ${String(h.production_date).slice(0, 10)}` : ''} ✓{h.accepted_qty} RW{h.rework_qty} S{h.scrap_qty} — QC {h.qc_checker_code}{h.air_wash_checker_code ? ` · Air-wash ${h.air_wash_checker_code}` : ''}{h.manufacturing_line_no ? ` · Line ${h.manufacturing_line_no}` : ''}{h.production_unit_no ? ` · Unit ${h.production_unit_no}` : ''}{h.production_shift ? ` · Shift ${h.production_shift}` : ''}{h.production_supervisor_name ? ` · Sup ${h.production_supervisor_name}` : ''}{h.notes ? ` · “${h.notes}”` : ''}
+          <div key={h.id} className="border-b py-1">[{((h.stage || 'qc') === 'airwash' ? 'AW' : 'QC')}][{h.department}]{h.production_date ? ` ${String(h.production_date).slice(0, 10)}` : ''} ✓{h.accepted_qty} RW{h.rework_qty} S{h.scrap_qty} — QC {h.qc_checker_code}{h.air_wash_checker_code ? ` · Air-wash ${h.air_wash_checker_code}` : ''}{h.manufacturing_line_no ? ` · Line ${h.manufacturing_line_no}` : ''}{h.production_unit_no ? ` · Unit ${h.production_unit_no}` : ''}{h.production_shift ? ` · Shift ${h.production_shift}` : ''}{h.production_supervisor_name ? ` · Sup ${h.production_supervisor_name}` : ''}{h.notes ? ` · “${h.notes}”` : ''}
             {isStaff && (
               <button onClick={() => setEditing({ ...h, production_date: String(h.production_date || '').slice(0, 10) })} className="ml-2 border px-2 text-xs">Edit</button>
             )}

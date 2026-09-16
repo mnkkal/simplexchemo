@@ -40,12 +40,12 @@ class PoLineItem extends Model
         return $this->hasMany(ArticleScan::class);
     }
 
-    /** Live counters: accepted (net) + scrap (terminal) drive completion. */
-    public function counters(): array
+    /** Per-level counters: each level covers the full order qty on its own. */
+    public function stageCounters(string $stage): array
     {
-        $accepted = (int) $this->scans()->sum('accepted_qty');
-        $rework = (int) $this->scans()->sum('rework_qty');
-        $scrap = (int) $this->scans()->sum('scrap_qty');
+        $accepted = (int) $this->scans()->where('stage', $stage)->sum('accepted_qty');
+        $rework = (int) $this->scans()->where('stage', $stage)->sum('rework_qty');
+        $scrap = (int) $this->scans()->where('stage', $stage)->sum('scrap_qty');
         $pending = max(0, $this->order_qty - $accepted - $scrap);
 
         return [
@@ -57,12 +57,49 @@ class PoLineItem extends Model
         ];
     }
 
+    /** Currently open testing level: 'qc' → 'airwash' → null (both done). */
+    public function openStage(): ?string
+    {
+        if (!$this->stageCounters('qc')['complete']) {
+            return 'qc';
+        }
+        if (!$this->stageCounters('airwash')['complete']) {
+            return 'airwash';
+        }
+
+        return null;
+    }
+
+    /**
+     * Live counters. Flat keys describe the OPEN level (what the floor acts
+     * on); per-level breakdowns under 'qc' / 'airwash'. Article is complete
+     * only when BOTH levels cover the order qty.
+     */
+    public function counters(): array
+    {
+        $qc = $this->stageCounters('qc');
+        $aw = $this->stageCounters('airwash');
+        $open = $this->openStage();
+        $cur = $open === 'airwash' ? $aw : $qc;
+
+        return [
+            'stage' => $open,
+            'qc' => $qc,
+            'airwash' => $aw,
+            'accepted' => $cur['accepted'],
+            'rework' => $cur['rework'],
+            'scrap' => $cur['scrap'],
+            'pending' => $open === null ? 0 : $cur['pending'],
+            'complete' => $open === null,
+        ];
+    }
+
     public function refreshStatus(): string
     {
         $c = $this->counters();
         if ($c['complete']) {
             $status = 'complete';
-        } elseif ($c['accepted'] > 0 || $c['scrap'] > 0 || $c['rework'] > 0) {
+        } elseif ($this->scans()->exists()) {
             $status = 'in_progress';
         } else {
             $status = 'pending';

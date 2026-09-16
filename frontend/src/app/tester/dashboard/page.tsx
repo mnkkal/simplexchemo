@@ -68,14 +68,14 @@ export default function TesterDashboard() {
         {(!data.queue || data.queue.mine.length === 0) && <p className="text-sm text-slate-500">Nothing pending on your line right now.</p>}
         {(data.queue?.mine || []).map((r: any) => (
           <Link key={r.line_item_id} href={`/articles/${r.article_qr_token}`} className="mt-1 block border border-green-600 bg-green-50 p-2 text-sm">
-            <b>{r.purchase_order_no} · {r.article_no}</b> · {r.bag_size} · pending <b>{r.counters.pending}</b> / {r.order_qty} · {r.status}
+            <b>{r.purchase_order_no} · {r.article_no}</b> · {r.bag_size} · {r.counters?.stage === 'airwash' ? 'Level 2 Air-wash' : 'Level 1 QC'} · pending <b>{r.counters.pending}</b> / {r.order_qty} · {r.status}
           </Link>
         ))}
         <h2 className="mt-3 font-bold">Other pending articles</h2>
         {(!data.queue || data.queue.other.length === 0) && <p className="text-sm text-slate-500">Nothing else pending.</p>}
         {(data.queue?.other || []).map((r: any) => (
           <Link key={r.line_item_id} href={`/articles/${r.article_qr_token}`} className="mt-1 block border bg-white p-2 text-sm">
-            <b>{r.purchase_order_no} · {r.article_no}</b> · {r.bag_size} · pending <b>{r.counters.pending}</b> / {r.order_qty} · {r.status}{r.last_line ? ` · line ${r.last_line}` : ' · not started'}
+            <b>{r.purchase_order_no} · {r.article_no}</b> · {r.bag_size} · {r.counters?.stage === 'airwash' ? 'Level 2 Air-wash' : 'Level 1 QC'} · pending <b>{r.counters.pending}</b> / {r.order_qty} · {r.status}{r.last_line ? ` · line ${r.last_line}` : ' · not started'}
           </Link>
         ))}
       </div>

@@ -22,15 +22,20 @@ class ArticleScanController extends Controller
         // global — the verdict math needs the true pending balance.
         [$staff, $checker] = $this->resolveViewer($request);
         $history = $line->scans;
-        $byChecker = $this->breakdown($line, 'qc_checker_code');
+        $byChecker = $this->breakdown($line, 'qc_checker_code', 'qc');
+        $byAirwash = $this->breakdown($line, 'air_wash_checker_code', 'airwash');
+        // "By line" follows the open level (the floor's current work).
+        $byLine = $this->breakdown($line, 'manufacturing_line_no', $line->openStage() ?? 'airwash');
         if (!$staff) {
             if ($checker) {
                 $history = $history->filter(fn ($s) => $s->qc_checker_code === $checker->checker_code
                     || $s->air_wash_checker_code === $checker->checker_code)->values();
                 $byChecker = array_values(array_filter($byChecker, fn ($r) => $r['key'] === $checker->checker_code));
+                $byAirwash = array_values(array_filter($byAirwash, fn ($r) => $r['key'] === $checker->checker_code));
             } else {
                 $history = [];
                 $byChecker = [];
+                $byAirwash = [];
             }
         }
 
@@ -42,7 +47,8 @@ class ArticleScanController extends Controller
             'status' => $line->status,
             'history' => $history,
             'by_checker' => $byChecker,
-            'by_line' => $this->breakdown($line, 'manufacturing_line_no'),
+            'by_airwash' => $byAirwash,
+            'by_line' => $byLine,
             // Active testers for the QC/air-wash dropdowns (public: codes are
             // floor identity, not secrets — same list Admin → Testers manages).
             'testers' => QcChecker::where('active', true)->orderBy('name')
@@ -123,17 +129,29 @@ class ArticleScanController extends Controller
             // the row before reading sums so two testers can't both consume
             // the same pending balance (double-count overshoot).
             $line = PoLineItem::whereKey($line->id)->lockForUpdate()->firstOrFail();
-            $accepted = (int) $line->scans()->sum('accepted_qty');
-            $scrap = (int) $line->scans()->sum('scrap_qty');
+
+            // Two levels, each covering the full order qty: QC first, then
+            // Air-wash from 0. The open level is automatic — no extra tap.
+            $stage = $line->openStage();
+            if ($stage === null) {
+                abort(422, 'Article complete at both levels (QC + Air-wash). Use Edit to correct a row.');
+            }
+            $accepted = (int) $line->scans()->where('stage', $stage)->sum('accepted_qty');
+            $scrap = (int) $line->scans()->where('stage', $stage)->sum('scrap_qty');
 
             // Rework is re-queueable so it never consumes the cap; accepted+scrap must fit.
             if ($accepted + $scrap + $data['accepted_qty'] + $data['scrap_qty'] > $line->order_qty) {
-                abort(422, 'Accepted + scrap would exceed order qty '.$line->order_qty.' (already accepted '.$accepted.', scrap '.$scrap.')');
+                abort(422, 'Accepted + scrap would exceed order qty '.$line->order_qty.' at '.($stage === 'qc' ? 'QC' : 'Air-wash').' level (already accepted '.$accepted.', scrap '.$scrap.')');
             }
 
+            // Attribution: QC rows carry the submitter as QC tester (+ optional
+            // air-wash code from the details form). Air-wash rows carry the
+            // submitter as the air-wash tester (qc code mirrors the recorder;
+            // qc_checker_code is NOT NULL, and stage keeps the levels apart).
             $scan = ArticleScan::create([
                 'po_line_item_id' => $line->id,
                 'department' => $data['department'],
+                'stage' => $stage,
                 'qc_checker_code' => $checker->checker_code,
                 'qc_checker_name' => $checker->name,
                 'manufacturing_line_no' => $data['manufacturing_line_no'] ?? null,
@@ -141,8 +159,8 @@ class ArticleScanController extends Controller
                 'production_date' => $data['production_date'] ?? now()->toDateString(),
                 'production_unit_no' => $data['production_unit_no'] ?? null,
                 'production_supervisor_name' => $data['production_supervisor_name'] ?? null,
-                'air_wash_checker_code' => $airWash?->checker_code,
-                'air_wash_checker_name' => $airWash?->name,
+                'air_wash_checker_code' => $stage === 'airwash' ? $checker->checker_code : $airWash?->checker_code,
+                'air_wash_checker_name' => $stage === 'airwash' ? $checker->name : $airWash?->name,
                 'accepted_qty' => $data['accepted_qty'],
                 'rework_qty' => $data['rework_qty'],
                 'scrap_qty' => $data['scrap_qty'],
@@ -223,11 +241,11 @@ class ArticleScanController extends Controller
             return response()->json(['message' => 'Enter at least one quantity greater than zero'], 422);
         }
 
-        // Re-check the cap excluding this row's old values.
-        $otherAccepted = (int) $line->scans()->where('id', '!=', $scan->id)->sum('accepted_qty');
-        $otherScrap = (int) $line->scans()->where('id', '!=', $scan->id)->sum('scrap_qty');
+        // Re-check the cap within this row's level, excluding its old values.
+        $otherAccepted = (int) $line->scans()->where('stage', $scan->stage)->where('id', '!=', $scan->id)->sum('accepted_qty');
+        $otherScrap = (int) $line->scans()->where('stage', $scan->stage)->where('id', '!=', $scan->id)->sum('scrap_qty');
         if ($otherAccepted + $otherScrap + $scan->accepted_qty + $scan->scrap_qty > $line->order_qty) {
-            return response()->json(['message' => 'Accepted + scrap would exceed order qty '.$line->order_qty.' (other scans already accepted '.$otherAccepted.', scrap '.$otherScrap.')'], 422);
+            return response()->json(['message' => 'Accepted + scrap would exceed order qty '.$line->order_qty.' at '.($scan->stage === 'airwash' ? 'Air-wash' : 'QC').' level (other scans already accepted '.$otherAccepted.', scrap '.$otherScrap.')'], 422);
         }
 
         $scan->save();
@@ -239,9 +257,13 @@ class ArticleScanController extends Controller
         ));
     }
 
-    private function breakdown(PoLineItem $line, string $column): array
+    private function breakdown(PoLineItem $line, string $column, ?string $stage = null): array
     {
-        return $line->scans()
+        $q = $line->scans();
+        if ($stage !== null) {
+            $q->where('stage', $stage);
+        }
+        return $q
             ->selectRaw($column.' as grp, SUM(accepted_qty) as accepted, SUM(rework_qty) as rework, SUM(scrap_qty) as scrap, COUNT(*) as scans')
             ->groupBy($column)
             ->get()

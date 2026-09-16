@@ -34,8 +34,6 @@ class TesterController extends Controller
             ->limit(200)
             ->get();
 
-        $asQc = $scans->where('qc_checker_code', $checker->checker_code);
-
         $byArticle = $scans->groupBy(fn ($s) => $s->lineItem?->purchaseOrder?->purchase_order_no.' | '.$s->lineItem?->article_no)
             ->map(fn ($rows, $key) => [
                 'order' => $key,
@@ -58,8 +56,8 @@ class TesterController extends Controller
             'queue' => $this->queue($checker),
             'totals' => [
                 'scans' => $scans->count(),
-                'as_qc' => $asQc->count(),
-                'as_air_wash' => $scans->count() - $asQc->count(),
+                'as_qc' => $scans->where('stage', 'qc')->count() + $scans->whereNull('stage')->count(),
+                'as_air_wash' => $scans->where('stage', 'airwash')->count(),
                 'accepted' => (int) $scans->sum('accepted_qty'),
                 'rework' => (int) $scans->sum('rework_qty'),
                 'scrap' => (int) $scans->sum('scrap_qty'),
@@ -67,11 +65,12 @@ class TesterController extends Controller
             'by_article' => $byArticle,
             'recent' => $scans->map(fn ($s) => [
                 'id' => $s->id,
+                'stage' => $s->stage ?? 'qc',
                 'production_date' => $s->production_date,
                 'purchase_order_no' => $s->lineItem?->purchaseOrder?->purchase_order_no,
                 'article_no' => $s->lineItem?->article_no,
                 'department' => $s->department,
-                'role' => $s->qc_checker_code === $checker->checker_code ? 'QC' : 'Air-wash',
+                'role' => ($s->stage ?? 'qc') === 'airwash' ? 'Air-wash' : 'QC',
                 'manufacturing_line_no' => $s->manufacturing_line_no,
                 'production_shift' => $s->production_shift,
                 'accepted_qty' => $s->accepted_qty,

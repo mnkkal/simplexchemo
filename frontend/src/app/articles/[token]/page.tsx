@@ -1,12 +1,15 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { getCheckerCode, getCheckerName, saveChecker } from '@/lib/checker';
 import { enqueue, cacheSet, cacheGet } from '@/lib/offline';
 
 export default function ArticleQC({ params }: { params: { token: string } }) {
   const token = decodeURIComponent(params.token);
+  const router = useRouter();
+  const backTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [ctx, setCtx] = useState<any>(null);
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
@@ -74,6 +77,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
     setTesterName(getCheckerName());
     setIsStaff(!!localStorage.getItem('staff_token'));
     load(true);
+    return () => { if (backTimer.current) clearTimeout(backTimer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -89,6 +93,14 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
     air_wash_checker_code: airWashCode.trim() || undefined,
     tested_at: new Date().toISOString(),
   });
+
+  // Fast floor flow: after a verdict is recorded (or queued offline),
+  // return to the scan screen so the next QR can be scanned immediately.
+  const backToScan = () => {
+    if (backTimer.current) clearTimeout(backTimer.current);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    backTimer.current = setTimeout(() => router.push('/tester/dashboard#scan'), 1500);
+  };
 
   // Tester verdict: Pass submits at once; Repair/Reject go through a remark step.
   const submitVerdict = async (v: 'pass' | 'repair' | 'reject', remarkText: string) => {
@@ -115,14 +127,16 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
       const r = await api.submitArticleScan(payload);
       try { await api.verifyChecker(code.trim()).then((c: any) => { saveChecker(code.trim(), c.device_token, c.name); setTesterName(c.name); setTesterSession(true); }); } catch {}
       const label = v === 'pass' ? 'Pass' : v === 'repair' ? 'Repair' : 'Reject';
-      setMsg(`Recorded ${label} ${qty} ✓ Now: accepted ${r.counters.accepted}, pending ${r.counters.pending}.`);
+      setMsg(`Recorded ${label} ${qty} ✓ Now: accepted ${r.counters.accepted}, pending ${r.counters.pending}. Back to scan…`);
       setPendingVerdict(null); setRemark('');
       setVerdictQty(1);
       await load();
+      backToScan();
     } catch (ex: any) {
       if (!navigator.onLine || /fetch|network|Failed/i.test(ex.message)) {
         const uuid = await enqueue('article-scan', payload);
-        setMsg(`Offline — verdict queued for sync (id ${uuid.slice(0, 8)}…). Same id will not double-count on retry.`);
+        setMsg(`Offline — verdict queued for sync (id ${uuid.slice(0, 8)}…). Same id will not double-count on retry. Back to scan…`);
+        backToScan();
       } else setErr(ex.message);
     }
   };

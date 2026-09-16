@@ -19,6 +19,7 @@ export default function Admin() {
     api.dashboard().then(setStats).catch((e: any) => {
       if (/401|Unauthenticated/i.test(e.message)) {
         localStorage.removeItem('staff_token');
+        localStorage.removeItem('staff_user');
         router.replace('/login?next=/admin');
       } else setErr(e.message);
     });
@@ -77,6 +78,7 @@ export default function Admin() {
 
   const logout = () => {
     localStorage.removeItem('staff_token');
+    localStorage.removeItem('staff_user');
     router.replace('/login?next=/admin');
   };
 

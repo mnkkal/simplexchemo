@@ -14,6 +14,9 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
   const [department, setDept] = useState('packing');
   const [code, setCode] = useState('');
   const [testerName, setTesterName] = useState('');
+  const [testerSession, setTesterSession] = useState(false);
+  // Tester verdict buttons are visible only after a tester logs in on this
+  // device (checker_code in storage). Staff/admin sees production details.
   const [lineNo, setLineNo] = useState('');
   const [shift, setShift] = useState('');
   const [prodDate, setProdDate] = useState(new Date().toISOString().slice(0, 10));
@@ -64,7 +67,9 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
   };
 
   useEffect(() => {
-    setCode(getCheckerCode());
+    const storedCode = getCheckerCode();
+    setCode(storedCode);
+    setTesterSession(!!storedCode);
     setTesterName(getCheckerName());
     setIsStaff(!!localStorage.getItem('staff_token'));
     load(true);
@@ -102,7 +107,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
     };
     try {
       const r = await api.submitArticleScan(payload);
-      try { await api.verifyChecker(code.trim()).then((c: any) => { saveChecker(code.trim(), c.device_token, c.name); setTesterName(c.name); }); } catch {}
+      try { await api.verifyChecker(code.trim()).then((c: any) => { saveChecker(code.trim(), c.device_token, c.name); setTesterName(c.name); setTesterSession(true); }); } catch {}
       const label = v === 'pass' ? 'Pass' : v === 'repair' ? 'Repair' : 'Reject';
       setMsg(`Recorded ${label} ${qty} ✓ Now: accepted ${r.counters.accepted}, pending ${r.counters.pending}.`);
       setPendingVerdict(null); setRemark('');
@@ -120,7 +125,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
   const saveDetails = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(''); setMsg('');
-    if (!code.trim()) { setErr('Enter your tester/staff code.'); return; }
+    if (!code.trim()) { setErr('Enter a valid tester code — Admin → Testers must create it first.'); return; }
     const payload = { ...basePayload(), accepted_qty: 0, rework_qty: 0, scrap_qty: 0 };
     try {
       await api.submitArticleScan(payload);
@@ -158,7 +163,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
         ))}</div>
       </div>
 
-      {!c.complete && (
+      {!c.complete && testerSession && (
         <div className="space-y-3 border bg-white p-4">
           <h2 className="text-sm font-bold">Tester verdict (pending {c.pending})</h2>
           {testerName ? (
@@ -187,6 +192,14 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {!c.complete && !testerSession && (
+        <div className="border border-amber-400 bg-amber-50 p-4 text-sm">
+          <b>Tester login required.</b> Pass / Repair / Reject buttons appear after a tester logs in on this device.{' '}
+          <Link href={`/tester?next=/articles/${token}`} className="underline">Go to Tester login</Link>
+          {isStaff && <span className="mt-1 block text-slate-600">Staff/admin: use Production details below to add information (no quantities).</span>}
         </div>
       )}
 

@@ -18,6 +18,7 @@ function LoginForm() {
         try {
           const r = await api.login(email, password);
           localStorage.setItem('staff_token', r.token);
+          localStorage.setItem('staff_user', r.user?.email || email);
           router.push(next);
         } catch (ex: any) { setErr(ex.message); }
       }}

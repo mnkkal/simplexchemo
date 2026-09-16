@@ -1,10 +1,11 @@
 // Minimal offline-first service worker: cache app shell, network-first for API.
-const CACHE = 'qc-shell-v1';
+// Bump CACHE on each release so testers never sit on a stale dashboard.
+const CACHE = 'qc-shell-v2';
 const SHELL = ['/', '/manifest.json'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
-self.addEventListener('activate', (e) => { e.waitUntil(self.clients.claim()); });
+self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (url.pathname.startsWith('/api/')) return; // API: network only (queued in IndexedDB when offline)

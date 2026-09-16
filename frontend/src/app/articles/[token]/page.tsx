@@ -47,21 +47,22 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
     if (last.air_wash_checker_code) setAirWashCode(last.air_wash_checker_code);
   };
 
-  const load = async (first = false) => {
-    // Tester isolation (§7): staff sees full history; a tester sees only
-    // their own rows. The server redacts live responses — this also covers
-    // data served from the offline cache of a previous session.
-    const scopeToViewer = (c: any) => {
-      if (!c || typeof window === 'undefined') return c;
-      if (localStorage.getItem('staff_token')) return c;
-      const mine = getCheckerCode();
-      if (!mine) return { ...c, history: [], by_checker: [] };
-      return {
-        ...c,
-        history: (c.history || []).filter((h: any) => h.qc_checker_code === mine || h.air_wash_checker_code === mine),
-        by_checker: (c.by_checker || []).filter((r: any) => r.key === mine),
-      };
+  // Tester isolation (§7): staff sees full history; a tester sees only
+  // their own rows. The server redacts live responses — this also covers
+  // data served from the offline cache of a previous session.
+  const scopeToViewer = (c: any) => {
+    if (!c || typeof window === 'undefined') return c;
+    if (localStorage.getItem('staff_token')) return c;
+    const mine = getCheckerCode();
+    if (!mine) return { ...c, history: [], by_checker: [] };
+    return {
+      ...c,
+      history: (c.history || []).filter((h: any) => h.qc_checker_code === mine || h.air_wash_checker_code === mine),
+      by_checker: (c.by_checker || []).filter((r: any) => r.key === mine),
     };
+  };
+
+  const load = async (first = false) => {
     try {
       const c = await api.articleContext(token);
       setCtx(scopeToViewer(c)); cacheSet(`article:${token}`, c);
@@ -121,9 +122,16 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
     setErr(''); setMsg('');
     if (!code.trim()) { setErr('Log in as a tester first.'); return; }
     const qty = Number(verdictQty);
-    const pending = ctx?.counters?.pending ?? 0;
     if (!qty || qty < 1) { setErr('Enter quantity ≥ 1.'); return; }
-    if (qty > pending) { setErr(`Only ${pending} pending — quantity can't exceed it.`); return; }
+    // Live pending: the other tester may have recorded since this page
+    // opened — both see the same shared balance, so re-check it now.
+    let pending = ctx?.counters?.pending ?? 0;
+    try {
+      const live = await api.articleContext(token);
+      setCtx(scopeToViewer(live));
+      pending = live.counters?.pending ?? 0;
+    } catch { /* offline: fall back to the shown balance */ }
+    if (qty > pending) { setErr(`Only ${pending} pending now — a teammate just recorded. Quantity adjusted.`); setVerdictQty(Math.max(1, pending)); await load(); return; }
     if (v !== 'pass' && !remarkText.trim()) { setErr('Add a remark for Repair / Reject.'); return; }
     // Safety: Passing/Rejecting the whole balance finishes the article and
     // can't be undone (only staff can correct via Edit) — confirm explicitly.

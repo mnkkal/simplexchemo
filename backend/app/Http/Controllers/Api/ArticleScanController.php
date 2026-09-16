@@ -119,6 +119,10 @@ class ArticleScanController extends Controller
         $line = PoLineItem::where('article_qr_token', $data['article_token'])->firstOrFail();
 
         return DB::transaction(function () use ($data, $line, $checker, $airWash) {
+            // Serialize concurrent tester submissions on this article: lock
+            // the row before reading sums so two testers can't both consume
+            // the same pending balance (double-count overshoot).
+            $line = PoLineItem::whereKey($line->id)->lockForUpdate()->firstOrFail();
             $accepted = (int) $line->scans()->sum('accepted_qty');
             $scrap = (int) $line->scans()->sum('scrap_qty');
 

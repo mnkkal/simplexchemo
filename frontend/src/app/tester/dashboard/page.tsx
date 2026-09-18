@@ -62,20 +62,13 @@ export default function TesterDashboard() {
         Scans <b>{t.scans}</b> · Pass <b>{t.accepted}</b> · Repair <b>{t.rework}</b> · Reject <b>{t.scrap}</b>
       </div>
 
-      {/* 2 · CURRENT WORK */}
+      {/* 2 · CURRENT WORK — only articles assigned to this tester. */}
       <div id="queue" className="scroll-mt-16">
-        <h2 className="font-bold">Current work{p.production_line_no ? ` — my line (${p.production_line_no})` : ''}</h2>
-        {(!data.queue || data.queue.mine.length === 0) && <p className="text-sm text-slate-500">Nothing pending on your line right now.</p>}
+        <h2 className="font-bold">My assigned work</h2>
+        {(!data.queue || data.queue.mine.length === 0) && <p className="text-sm text-slate-500">No work assigned to you right now — ask staff to assign articles.</p>}
         {(data.queue?.mine || []).map((r: any) => (
           <Link key={r.line_item_id} href={`/articles/${r.article_qr_token}`} className="mt-1 block border border-green-600 bg-green-50 p-2 text-sm">
             <b>{r.purchase_order_no} · {r.article_no}</b> · {r.bag_size} · {r.counters?.stage === 'airwash' ? 'Level 2 Air-wash' : 'Level 1 QC'} · pending <b>{r.counters.pending}</b> / {r.order_qty} · {r.status}{r.assigned_qc_code ? ` · QC→${r.assigned_qc_code}` : ''}{r.assigned_aw_code ? ` · AW→${r.assigned_aw_code}` : ''}
-          </Link>
-        ))}
-        <h2 className="mt-3 font-bold">Other pending articles</h2>
-        {(!data.queue || data.queue.other.length === 0) && <p className="text-sm text-slate-500">Nothing else pending.</p>}
-        {(data.queue?.other || []).map((r: any) => (
-          <Link key={r.line_item_id} href={`/articles/${r.article_qr_token}`} className="mt-1 block border bg-white p-2 text-sm">
-            <b>{r.purchase_order_no} · {r.article_no}</b> · {r.bag_size} · {r.counters?.stage === 'airwash' ? 'Level 2 Air-wash' : 'Level 1 QC'} · pending <b>{r.counters.pending}</b> / {r.order_qty} · {r.status}{r.assigned_qc_code ? ` · QC→${r.assigned_qc_code}` : ''}{r.assigned_aw_code ? ` · AW→${r.assigned_aw_code}` : ''}{r.last_line ? ` · line ${r.last_line}` : ' · not started'}
           </Link>
         ))}
       </div>

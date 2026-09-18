@@ -92,11 +92,16 @@ class TesterController extends Controller
             ->limit(100)
             ->get();
 
+        // Strict assignment: a tester sees ONLY articles assigned to them
+        // (at either level). Unassigned work is invisible until staff assigns.
         $mine = [];
-        $other = [];
         foreach ($lines as $line) {
+            if ($line->assigned_qc_code !== $checker->checker_code
+                && $line->assigned_aw_code !== $checker->checker_code) {
+                continue;
+            }
             $lastLine = $line->scans->first()?->manufacturing_line_no;
-            $row = [
+            $mine[] = [
                 'line_item_id' => $line->id,
                 'purchase_order_no' => $line->purchaseOrder?->purchase_order_no,
                 'customer_name' => $line->purchaseOrder?->customer_name,
@@ -107,19 +112,12 @@ class TesterController extends Controller
                 'counters' => $line->counters(),
                 'article_qr_token' => $line->article_qr_token,
                 'last_line' => $lastLine,
+                'mine' => true,
                 'assigned_qc_code' => $line->assigned_qc_code,
                 'assigned_aw_code' => $line->assigned_aw_code,
-                'mine' => $checker->production_line_no
-                    && $lastLine
-                    && strcasecmp($lastLine, $checker->production_line_no) === 0,
             ];
-            if ($row['mine']) {
-                $mine[] = $row;
-            } else {
-                $other[] = $row;
-            }
         }
 
-        return ['mine' => $mine, 'other' => $other];
+        return ['mine' => $mine, 'other' => []];
     }
 }

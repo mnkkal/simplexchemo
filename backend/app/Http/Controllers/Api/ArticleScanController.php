@@ -152,12 +152,16 @@ class ArticleScanController extends Controller
                 abort(422, 'Article complete at both levels (QC + Air-wash). Use Edit to correct a row.');
             }
 
-            // Per-article assignment: non-staff testers record only where
-            // they are assigned (NULL = open pool). Staff bypasses as admin
-            // override (e.g. corrections, details entry).
+            // Per-article assignment (strict): non-staff testers record only
+            // where THEY are assigned. Unassigned articles are invisible and
+            // untestable for testers — staff assigns first. Staff bypasses as
+            // admin override (e.g. corrections, details entry).
             if (!$staff) {
                 $assigned = $stage === 'airwash' ? $line->assigned_aw_code : $line->assigned_qc_code;
-                if ($assigned && $checker->checker_code !== $assigned) {
+                if (!$assigned) {
+                    abort(422, 'Article not assigned to any tester yet — ask staff to assign it first');
+                }
+                if ($checker->checker_code !== $assigned) {
                     abort(422, 'Article assigned to tester '.$assigned.' at '.($stage === 'airwash' ? 'Air-wash' : 'QC').' level');
                 }
             }

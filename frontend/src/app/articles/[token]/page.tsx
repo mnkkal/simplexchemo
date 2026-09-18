@@ -93,13 +93,14 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
     };
   };
 
-  // Level visibility: a tester is offered only their assigned level(s) or
-  // open-pool levels. Staff sees both. The effective level falls back to
-  // the visible tab when the selected one is hidden.
+  // Level visibility (strict assignment): a tester is offered only levels
+  // assigned TO THEM. Unassigned articles show no tabs at all — staff must
+  // assign first. Staff sees both. The effective level falls back to the
+  // visible tab when the selected one is hidden.
   const levelAccess = (cc: any) => {
     const l = cc?.line_item || {};
-    const q = isStaff || !l.assigned_qc_code || l.assigned_qc_code === code;
-    const a = isStaff || !l.assigned_aw_code || l.assigned_aw_code === code;
+    const q = isStaff || (!!l.assigned_qc_code && l.assigned_qc_code === code);
+    const a = isStaff || (!!l.assigned_aw_code && l.assigned_aw_code === code);
     const e = !q && a ? 'airwash' : (!a && q ? 'qc' : stageSel);
     return { showQc: q, showAw: a, eff: e as 'qc' | 'airwash' };
   };
@@ -248,11 +249,12 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
   const { showQc, showAw, eff } = levelAccess(ctx);
   const sel = eff === 'airwash' ? c.airwash : c.qc;
   // Assignment gate: a tester records only where assigned (per level).
-  // Staff bypasses (admin override); empty assignment = open pool.
+  // Unassigned = locked for testers; staff bypasses (admin override).
   const stageAssignee = eff === 'airwash'
     ? (ctx.line_item.assigned_aw_code || '')
     : (ctx.line_item.assigned_qc_code || '');
-  const canRecord = isStaff || !stageAssignee || stageAssignee === code;
+  const hasAnyAssignment = !!(ctx.line_item.assigned_qc_code || ctx.line_item.assigned_aw_code);
+  const canRecord = isStaff || (stageAssignee !== '' && stageAssignee === code);
 
   return (
     <div className="max-w-2xl space-y-4">
@@ -309,7 +311,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
           <div className="flex gap-2 text-sm" role="tablist" aria-label="Testing level">
             {showQc && <button type="button" onClick={() => { setErr(''); setStageSel('qc'); setVerdictQty(1); }} className={`border px-4 py-2 font-bold ${eff === 'qc' ? 'bg-slate-900 text-white' : ''}`}>Level 1 · QC ({c.qc.pending} left)</button>}
             {showAw && <button type="button" onClick={() => { setErr(''); setStageSel('airwash'); setVerdictQty(1); }} className={`border px-4 py-2 font-bold ${eff === 'airwash' ? 'bg-slate-900 text-white' : ''}`}>Level 2 · Air-wash ({c.airwash.pending} left)</button>}
-            {!showQc && !showAw && <p className="text-sm text-slate-600">This article is assigned to other testers — nothing for you here.</p>}
+            {!showQc && !showAw && <p className="text-sm text-slate-600">{hasAnyAssignment ? 'This article is assigned to other testers — nothing for you here.' : 'This article is not assigned to any tester yet — ask staff to assign it first.'}</p>}
           </div>
           {testerName ? (
             <p className="text-sm">Logged in as <b>{testerName} ({code})</b> · <Link href={`/tester?next=/articles/${token}`} className="underline">switch</Link></p>
@@ -329,7 +331,9 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
           </div>
           {!canRecord && (
             <p className="border border-amber-400 bg-amber-50 p-3 text-sm">
-              Assigned to tester <b>{stageAssignee}</b> at {stageSel === 'airwash' ? 'Air-wash' : 'QC'} level — your code ({code || '—'}) can&apos;t record here. <Link href={`/tester?next=/articles/${token}`} className="underline">Switch tester</Link>
+              {stageAssignee
+                ? <>Assigned to tester <b>{stageAssignee}</b> at {eff === 'airwash' ? 'Air-wash' : 'QC'} level — your code ({code || '—'}) can&apos;t record here. <Link href={`/tester?next=/articles/${token}`} className="underline">Switch tester</Link></>
+                : <>Not assigned to any tester yet — ask staff to assign it first.</>}
             </p>
           )}
           {pendingVerdict && (
@@ -391,7 +395,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
               <label className="block text-sm">Assigned QC tester (only they can record QC)
                 {(ctx.testers || []).length > 0 ? (
                   <select value={assignQc} onChange={(e) => setAssignQc(e.target.value)} className="mt-1 w-full border p-2">
-                    <option value="">— Open pool (any tester) —</option>
+                    <option value="">— Not assigned (hidden from testers) —</option>
                     {(ctx.testers || []).map((t: any) => (
                       <option key={t.id} value={t.checker_code}>{t.name} ({t.checker_code})</option>
                     ))}
@@ -403,7 +407,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
               <label className="block text-sm">Assigned air-wash tester (only they can record air-wash)
                 {(ctx.testers || []).length > 0 ? (
                   <select value={assignAw} onChange={(e) => setAssignAw(e.target.value)} className="mt-1 w-full border p-2">
-                    <option value="">— Open pool (any tester) —</option>
+                    <option value="">— Not assigned (hidden from testers) —</option>
                     {(ctx.testers || []).map((t: any) => (
                       <option key={t.id} value={t.checker_code}>{t.name} ({t.checker_code})</option>
                     ))}

@@ -77,14 +77,28 @@ export default function ScanView({ params }: { params: { token: string } }) {
 
   // Pallet
   const p = data.pallet;
+  const hasLines = (data.lines || []).length > 0;
   return (
     <div className="max-w-xl space-y-3">
-      <h1 className="text-xl font-bold">{data.all_passed ? '✅ Pallet — all units QC passed' : `Pallet ${p.pallet_no}`} ({data.passed_count}/{data.unit_count} passed)</h1>
+      <h1 className="text-xl font-bold">{hasLines
+        ? (data.all_passed ? '✅ Pallet — all articles passed both QC levels' : `Pallet ${p.pallet_no}`)
+        : (data.all_passed ? '✅ Pallet — all units QC passed' : `Pallet ${p.pallet_no}`)} {!hasLines && `(${data.passed_count}/${data.unit_count} passed)`}</h1>
       <div className="border bg-white p-3 text-sm">
         Customer: {p.customer_name}<br />PO: {p.purchase_order_no}<br />Article: {p.article_no}<br />Size: {p.bag_size}<br />
         Pallet: {p.pallet_no} · {p.pallet_pcs} pcs · {String(p.packing_date).slice(0, 10)} · shift {p.packing_shift}
       </div>
-      {data.units && <div className="text-sm">Units: {(data.units as any[]).map((u: any) => `#${u.id}(${u.status})`).join(', ')}</div>}
+      {hasLines && (data.lines as any[]).map((l: any) => (
+        <div key={l.article_no} className="border bg-white p-3 text-sm">
+          <b>{l.article_no}</b> · {l.bag_size} · packed <b>{l.packed_qty}</b>/{l.order_qty} {l.complete ? '✅' : ''}<br />
+          QC ✓{l.qc.accepted} RW{l.qc.rework} S{l.qc.scrap} · Air-wash ✓{l.airwash.accepted} RW{l.airwash.rework} S{l.airwash.scrap}
+          {(l.history || []).map((h: any) => (
+            <div key={h.id} className="border-b py-1 text-xs">
+              [{((h.stage || 'qc') === 'airwash' ? 'AW' : 'QC')}] ✓{h.accepted_qty} RW{h.rework_qty} S{h.scrap_qty} — QC {h.qc_checker_code}{h.air_wash_checker_code ? ` · AW ${h.air_wash_checker_code}` : ''}{h.notes ? ` · “${h.notes}”` : ''}
+            </div>
+          ))}
+        </div>
+      ))}
+      {data.units && !hasLines && <div className="text-sm">Units: {(data.units as any[]).map((u: any) => `#${u.id}(${u.status})`).join(', ')}</div>}
       {err && <p className="text-xs text-amber-700">{err}</p>}
     </div>
   );

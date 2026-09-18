@@ -82,12 +82,38 @@ class ScanController extends Controller
             ]);
         }
 
-        $pallet = Pallet::where('pallet_qr_token', $token)->with(['units.qcRounds'])->first();
+        $pallet = Pallet::where('pallet_qr_token', $token)->with(['units.qcRounds', 'articleLines.scans', 'articleLines.purchaseOrder'])->first();
         if ($pallet) {
             $isStaff = $request->boolean('staff') || $request->user() !== null;
 
             $unitIds = $pallet->units->pluck('id');
             $passed = $pallet->units->where('status', 'passed')->count();
+
+            // New article flow: every packed article with order details,
+            // both QC levels, and (staff) full scan history.
+            $lines = $pallet->articleLines->map(function ($l) use ($isStaff) {
+                $c = $l->counters();
+                $row = [
+                    'article_no' => $l->article_no,
+                    'bag_size' => $l->bag_size,
+                    'order_qty' => $l->order_qty,
+                    'packed_qty' => (int) ($l->pivot->qty ?? 0),
+                    'purchase_order_no' => $l->purchaseOrder?->purchase_order_no,
+                    'customer_name' => $l->purchaseOrder?->customer_name,
+                    'qc' => $c['qc'],
+                    'airwash' => $c['airwash'],
+                    'complete' => $c['complete'],
+                ];
+                if ($isStaff) {
+                    $row['history'] = $l->scans;
+                }
+
+                return $row;
+            })->values();
+
+            $allPassed = $lines->isNotEmpty()
+                ? $lines->every(fn ($l) => $l['complete'])
+                : ($passed === $pallet->units->count() && $pallet->units->count() > 0);
 
             $payload = [
                 'type' => 'pallet',
@@ -103,7 +129,8 @@ class ScanController extends Controller
                 ],
                 'unit_count' => $pallet->units->count(),
                 'passed_count' => $passed,
-                'all_passed' => $passed === $pallet->units->count() && $pallet->units->count() > 0,
+                'all_passed' => $allPassed,
+                'lines' => $lines,
             ];
 
             if ($isStaff) {

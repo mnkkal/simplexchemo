@@ -27,7 +27,8 @@ class Pallet extends Model
         do {
             $token = Str::random(32);
         } while (static::where('pallet_qr_token', $token)->exists()
-            || Unit::where('unit_qr_token', $token)->exists());
+            || Unit::where('unit_qr_token', $token)->exists()
+            || PoLineItem::where('article_qr_token', $token)->exists());
 
         return $token;
     }
@@ -40,5 +41,15 @@ class Pallet extends Model
     public function units()
     {
         return $this->belongsToMany(Unit::class, 'pallet_units');
+    }
+
+    public function palletLineItems()
+    {
+        return $this->hasMany(PalletLineItem::class);
+    }
+
+    public function articleLines()
+    {
+        return $this->belongsToMany(PoLineItem::class, 'pallet_line_items')->withPivot('qty');
     }
 }

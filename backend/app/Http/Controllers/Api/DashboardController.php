@@ -108,7 +108,7 @@ class DashboardController extends Controller
             'tested_at' => $r->tested_at,
         ])->values();
 
-        $tab3 = Pallet::with('units')->orderBy('id')->get()->map(fn ($p) => [
+        $tab3 = Pallet::with(['units', 'articleLines'])->orderBy('id')->get()->map(fn ($p) => [
             'pallet_qr_token' => $p->pallet_qr_token,
             'customer_name' => $p->customer_name,
             'purchase_order_no' => $p->purchase_order_no,
@@ -122,6 +122,7 @@ class DashboardController extends Controller
             'packing_supervisor_name' => $p->packing_supervisor_name,
             'packing_machine_operator_name' => $p->packing_machine_operator_name,
             'unit_ids' => $p->units->pluck('id')->implode(','),
+            'article_lines' => $p->articleLines->map(fn ($l) => $l->article_no.' x'.$l->pivot->qty)->implode('; '),
         ])->values();
 
         return response()->json([

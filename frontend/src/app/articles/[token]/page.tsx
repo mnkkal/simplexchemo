@@ -313,7 +313,10 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
         ))}</CardBody></Card>
       </div>
 
-      {!c.complete && testerSession && (
+      {/* Tester verdict is the tester's tool: it shows only on a tester-only
+          session. Staff (admin login) gets admin tools, never this section —
+          one role per screen, no dual sessions. */}
+      {!c.complete && testerSession && !isStaff && (
         <Card><CardBody className="space-y-3">
           <h2 className="text-sm font-bold">Tester verdict ({eff === 'airwash' ? 'Air-wash' : 'QC'} pending {sel.pending})</h2>
           <div className="flex gap-2 text-sm" role="tablist" aria-label="Testing level">
@@ -321,17 +324,6 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
             {showAw && <button type="button" onClick={() => { setErr(''); setStageSel('airwash'); setVerdictQty(1); }} className={`rounded-md border px-4 py-2 font-bold ${eff === 'airwash' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700'}`}>Level 2 · Air-wash ({c.airwash.pending} left)</button>}
             {!showQc && !showAw && <p className="text-sm text-slate-600">{hasAnyAssignment ? 'This article is assigned to other testers — nothing for you here.' : 'This article is not assigned to any tester yet — ask staff to assign it first.'}</p>}
           </div>
-          {testerName ? (
-            <p className="text-sm">Logged in as <b>{testerName} ({code})</b> · <Link href={`/tester?next=/articles/${token}`} className="underline">switch</Link></p>
-          ) : (
-            <p className="text-sm">Tester code
-              <input value={code} onChange={(e) => setCode(e.target.value)} className="ml-2 border p-2" placeholder="e.g. 001" />
-              <Link href={`/tester?next=/articles/${token}`} className="ml-2 underline">Tester login</Link>
-            </p>
-          )}
-          <label className="block text-sm">Quantity (max {sel.pending})
-            <input type="number" min={1} max={sel.pending} value={verdictQty} onChange={(e) => setVerdictQty(Number(e.target.value))} className="mt-1 w-full border p-2" />
-          </label>
           {testerName ? (
             <p className="text-sm text-slate-600">Logged in as <b className="text-slate-900">{testerName} ({code})</b> · <Link href={`/tester?next=/articles/${token}`} className="underline underline-offset-2">switch</Link></p>
           ) : (
@@ -368,11 +360,10 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
         </CardBody></Card>
       )}
 
-      {!c.complete && !testerSession && (
+      {!c.complete && !testerSession && !isStaff && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm shadow-sm">
           <b>Tester login required.</b> Pass / Repair / Reject buttons appear after a tester logs in on this device.{' '}
           <Link href={`/tester?next=/articles/${token}`} className="underline underline-offset-2">Go to Tester login</Link>
-          {isStaff && <span className="mt-1 block text-slate-600">Staff/admin: use Production details below to add information (no quantities).</span>}
         </div>
       )}
 

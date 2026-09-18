@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { Badge, Card, CardBody, PageHeader, btnPrimary, btnSecondary, inputCls } from '@/components/ui';
 import { getCheckerCode, getCheckerName, saveChecker } from '@/lib/checker';
 import { enqueue, cacheSet, cacheGet } from '@/lib/offline';
 
@@ -258,15 +259,22 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
 
   return (
     <div className="max-w-2xl space-y-4">
-      <h1 className="text-xl font-bold">Article QC — {ctx.line_item.article_no} {c.complete ? '✅ Complete' : ''}</h1>
-      <div className="border bg-white p-3 text-sm">
-        PO {ctx.purchase_order.purchase_order_no} · Line {ctx.line_item.line_number} · {ctx.line_item.bag_size} · Order {ctx.line_item.order_qty}<br />
-        Accepted <b>{c.accepted} ({pct(c.accepted)}%)</b> · Rework <b>{c.rework}</b> · Scrap <b>{c.scrap} ({pct(c.scrap)}%)</b> · Pending <b>{c.pending}</b>
-      </div>
-      <div className="border bg-white p-3 text-sm">
-        <b>Level 1 · QC:</b> ✓{c.qc.accepted}/{ctx.line_item.order_qty} · RW{c.qc.rework} · S{c.qc.scrap} {c.qc.complete ? '✅' : <>· pending <b>{c.qc.pending}</b></>}<br />
-        <b>Level 2 · Air-wash:</b> ✓{c.airwash.accepted}/{ctx.line_item.order_qty} · RW{c.airwash.rework} · S{c.airwash.scrap} {c.airwash.complete ? '✅' : <>· pending <b>{c.airwash.pending}</b></>}
-      </div>
+      <PageHeader
+        title={`Article QC — ${ctx.line_item.article_no}`}
+        subtitle={`PO ${ctx.purchase_order.purchase_order_no} · Line ${ctx.line_item.line_number} · ${ctx.line_item.bag_size} · Order ${ctx.line_item.order_qty}`}
+        actions={c.complete ? <Badge tone="green">✅ Complete</Badge> : <Badge tone="blue">In progress</Badge>}
+      />
+      <Card>
+        <CardBody className="text-sm">
+          Accepted <b>{c.accepted} ({pct(c.accepted)}%)</b> · Rework <b>{c.rework}</b> · Scrap <b>{c.scrap} ({pct(c.scrap)}%)</b> · Pending <b>{c.pending}</b>
+        </CardBody>
+      </Card>
+      <Card>
+        <CardBody className="text-sm">
+          <b>Level 1 · QC:</b> ✓{c.qc.accepted}/{ctx.line_item.order_qty} · RW{c.qc.rework} · S{c.qc.scrap} {c.qc.complete ? '✅' : <>· pending <b>{c.qc.pending}</b></>}<br />
+          <b>Level 2 · Air-wash:</b> ✓{c.airwash.accepted}/{ctx.line_item.order_qty} · RW{c.airwash.rework} · S{c.airwash.scrap} {c.airwash.complete ? '✅' : <>· pending <b>{c.airwash.pending}</b></>}
+        </CardBody>
+      </Card>
       {isStaff && (
         <form
           onSubmit={async (e) => {
@@ -281,36 +289,36 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
               await load();
             } catch (ex: any) { setErr(ex.message); }
           }}
-          className="border bg-white p-3 text-sm"
+          className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm"
         >
-          <b>Replacement units</b> (fresh bags produced for scrapped ones — enlarges both levels&apos; pools)
-          <div className="mt-1 flex items-center gap-2">
-            <input type="number" min={1} value={replQty} onChange={(e) => setReplQty(Number(e.target.value))} className="w-24 border p-2" />
-            <button className="border px-4 py-2">Add</button>
+          <b>Replacement units</b> <span className="text-slate-500">(fresh bags produced for scrapped ones — enlarges both levels&apos; pools)</span>
+          <div className="mt-2 flex items-center gap-2">
+            <input type="number" min={1} value={replQty} onChange={(e) => setReplQty(Number(e.target.value))} className={inputCls('!w-24')} />
+            <button className={btnSecondary('!py-2')}>Add</button>
             {(ctx.line_item.replacement_qty || 0) > 0 && <span className="text-slate-500">Recorded so far: {ctx.line_item.replacement_qty}</span>}
           </div>
         </form>
       )}
       {err && <p className="text-sm text-red-600">{err}</p>}
       {msg && <p className="text-sm text-green-700">{msg}{testerSession && (<> <Link href="/tester/dashboard#scan" className="underline">Scan next QR →</Link></>)}</p>}
-      <div className="grid gap-3 text-sm sm:grid-cols-2">
-        <div className="border bg-white p-3"><b>By tester (QC)</b>{(ctx.by_checker || []).map((r: any) => (
-          <div key={r.key} className="border-b py-1">{r.key}: ✓{r.accepted} · RW{r.rework} · S{r.scrap} → {r.pass_pct}% pass</div>
-        ))}</div>
-        <div className="border bg-white p-3"><b>By air-wash tester</b>{(ctx.by_airwash || []).map((r: any) => (
-          <div key={r.key} className="border-b py-1">{r.key}: ✓{r.accepted} · RW{r.rework} · S{r.scrap} → {r.pass_pct}% pass</div>
-        ))}</div>
-        <div className="border bg-white p-3"><b>By mfg line</b>{(ctx.by_line || []).map((r: any) => (
-          <div key={r.key} className="border-b py-1">Line {r.key}: ✓{r.accepted} · RW{r.rework} · S{r.scrap} → {r.fail_pct}% fail</div>
-        ))}</div>
+      <div className="grid gap-3 text-sm sm:grid-cols-3">
+        <Card><CardBody><b>By tester (QC)</b>{(ctx.by_checker || []).map((r: any) => (
+          <div key={r.key} className="border-b border-slate-100 py-1 last:border-0">{r.key}: ✓{r.accepted} · RW{r.rework} · S{r.scrap} → {r.pass_pct}% pass</div>
+        ))}</CardBody></Card>
+        <Card><CardBody><b>By air-wash tester</b>{(ctx.by_airwash || []).map((r: any) => (
+          <div key={r.key} className="border-b border-slate-100 py-1 last:border-0">{r.key}: ✓{r.accepted} · RW{r.rework} · S{r.scrap} → {r.pass_pct}% pass</div>
+        ))}</CardBody></Card>
+        <Card><CardBody><b>By mfg line</b>{(ctx.by_line || []).map((r: any) => (
+          <div key={r.key} className="border-b border-slate-100 py-1 last:border-0">Line {r.key}: ✓{r.accepted} · RW{r.rework} · S{r.scrap} → {r.fail_pct}% fail</div>
+        ))}</CardBody></Card>
       </div>
 
       {!c.complete && testerSession && (
-        <div className="space-y-3 border bg-white p-4">
+        <Card><CardBody className="space-y-3">
           <h2 className="text-sm font-bold">Tester verdict ({eff === 'airwash' ? 'Air-wash' : 'QC'} pending {sel.pending})</h2>
           <div className="flex gap-2 text-sm" role="tablist" aria-label="Testing level">
-            {showQc && <button type="button" onClick={() => { setErr(''); setStageSel('qc'); setVerdictQty(1); }} className={`border px-4 py-2 font-bold ${eff === 'qc' ? 'bg-slate-900 text-white' : ''}`}>Level 1 · QC ({c.qc.pending} left)</button>}
-            {showAw && <button type="button" onClick={() => { setErr(''); setStageSel('airwash'); setVerdictQty(1); }} className={`border px-4 py-2 font-bold ${eff === 'airwash' ? 'bg-slate-900 text-white' : ''}`}>Level 2 · Air-wash ({c.airwash.pending} left)</button>}
+            {showQc && <button type="button" onClick={() => { setErr(''); setStageSel('qc'); setVerdictQty(1); }} className={`rounded-md border px-4 py-2 font-bold ${eff === 'qc' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700'}`}>Level 1 · QC ({c.qc.pending} left)</button>}
+            {showAw && <button type="button" onClick={() => { setErr(''); setStageSel('airwash'); setVerdictQty(1); }} className={`rounded-md border px-4 py-2 font-bold ${eff === 'airwash' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700'}`}>Level 2 · Air-wash ({c.airwash.pending} left)</button>}
             {!showQc && !showAw && <p className="text-sm text-slate-600">{hasAnyAssignment ? 'This article is assigned to other testers — nothing for you here.' : 'This article is not assigned to any tester yet — ask staff to assign it first.'}</p>}
           </div>
           {testerName ? (
@@ -324,113 +332,126 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
           <label className="block text-sm">Quantity (max {sel.pending})
             <input type="number" min={1} max={sel.pending} value={verdictQty} onChange={(e) => setVerdictQty(Number(e.target.value))} className="mt-1 w-full border p-2" />
           </label>
+          {testerName ? (
+            <p className="text-sm text-slate-600">Logged in as <b className="text-slate-900">{testerName} ({code})</b> · <Link href={`/tester?next=/articles/${token}`} className="underline underline-offset-2">switch</Link></p>
+          ) : (
+            <p className="text-sm">Tester code
+              <input value={code} onChange={(e) => setCode(e.target.value)} className="ml-2 rounded-md border border-slate-300 p-2 text-sm" placeholder="e.g. 001" />
+              <Link href={`/tester?next=/articles/${token}`} className="ml-2 underline underline-offset-2">Tester login</Link>
+            </p>
+          )}
+          <label className="block text-sm font-medium text-slate-700">Quantity (max {sel.pending})
+            <input type="number" min={1} max={sel.pending} value={verdictQty} onChange={(e) => setVerdictQty(Number(e.target.value))} className="mt-1 w-full rounded-md border border-slate-300 p-2 text-base" />
+          </label>
           <div className="grid grid-cols-3 gap-2">
-            <button disabled={!canRecord} onClick={() => submitVerdict('pass', '')} className="bg-green-700 px-4 py-3 font-bold text-white disabled:opacity-40">✓ Pass</button>
-            <button disabled={!canRecord} onClick={() => { setErr(''); setPendingVerdict('repair'); }} className="bg-amber-600 px-4 py-3 font-bold text-white disabled:opacity-40">Repair</button>
-            <button disabled={!canRecord} onClick={() => { setErr(''); setPendingVerdict('reject'); }} className="bg-red-700 px-4 py-3 font-bold text-white disabled:opacity-40">Reject</button>
+            <button disabled={!canRecord} onClick={() => submitVerdict('pass', '')} className="rounded-md bg-green-700 px-4 py-3 font-bold text-white shadow-sm hover:bg-green-600 disabled:opacity-40">✓ Pass</button>
+            <button disabled={!canRecord} onClick={() => { setErr(''); setPendingVerdict('repair'); }} className="rounded-md bg-amber-600 px-4 py-3 font-bold text-white shadow-sm hover:bg-amber-500 disabled:opacity-40">Repair</button>
+            <button disabled={!canRecord} onClick={() => { setErr(''); setPendingVerdict('reject'); }} className="rounded-md bg-red-700 px-4 py-3 font-bold text-white shadow-sm hover:bg-red-600 disabled:opacity-40">Reject</button>
           </div>
           {!canRecord && (
-            <p className="border border-amber-400 bg-amber-50 p-3 text-sm">
+            <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
               {stageAssignee
-                ? <>Assigned to tester <b>{stageAssignee}</b> at {eff === 'airwash' ? 'Air-wash' : 'QC'} level — your code ({code || '—'}) can&apos;t record here. <Link href={`/tester?next=/articles/${token}`} className="underline">Switch tester</Link></>
+                ? <>Assigned to tester <b>{stageAssignee}</b> at {eff === 'airwash' ? 'Air-wash' : 'QC'} level — your code ({code || '—'}) can&apos;t record here. <Link href={`/tester?next=/articles/${token}`} className="underline underline-offset-2">Switch tester</Link></>
                 : <>Not assigned to any tester yet — ask staff to assign it first.</>}
             </p>
           )}
           {pendingVerdict && (
-            <div className="space-y-2 border border-amber-400 bg-amber-50 p-3">
+            <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3">
               <p className="text-sm font-bold">Remark required for {pendingVerdict === 'repair' ? 'Repair' : 'Reject'}</p>
-              <textarea value={remark} onChange={(e) => setRemark(e.target.value)} rows={2} className="w-full border p-2 text-sm" placeholder="e.g. stitch open at bottom, print smudge…" />
+              <textarea value={remark} onChange={(e) => setRemark(e.target.value)} rows={2} className="w-full rounded-md border border-slate-300 p-2 text-sm" placeholder="e.g. stitch open at bottom, print smudge…" />
               <div className="flex gap-2">
-                <button onClick={() => submitVerdict(pendingVerdict, remark)} className="bg-slate-900 px-4 py-2 text-white">Submit {pendingVerdict === 'repair' ? 'Repair' : 'Reject'}</button>
-                <button onClick={() => { setPendingVerdict(null); setRemark(''); }} className="border px-4 py-2">Cancel</button>
+                <button onClick={() => submitVerdict(pendingVerdict, remark)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Submit {pendingVerdict === 'repair' ? 'Repair' : 'Reject'}</button>
+                <button onClick={() => { setPendingVerdict(null); setRemark(''); }} className="rounded-md border border-slate-300 px-4 py-2 text-sm">Cancel</button>
               </div>
             </div>
           )}
-        </div>
+        </CardBody></Card>
       )}
 
       {!c.complete && !testerSession && (
-        <div className="border border-amber-400 bg-amber-50 p-4 text-sm">
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm shadow-sm">
           <b>Tester login required.</b> Pass / Repair / Reject buttons appear after a tester logs in on this device.{' '}
-          <Link href={`/tester?next=/articles/${token}`} className="underline">Go to Tester login</Link>
+          <Link href={`/tester?next=/articles/${token}`} className="underline underline-offset-2">Go to Tester login</Link>
           {isStaff && <span className="mt-1 block text-slate-600">Staff/admin: use Production details below to add information (no quantities).</span>}
         </div>
       )}
 
       {c.complete && (
-        <div className="border border-green-600 bg-green-50 p-4 text-sm">
+        <div className="rounded-lg border border-green-600 bg-green-50 p-4 text-sm shadow-sm">
           <b>✅ Article complete — both levels done, no further entry needed.</b> QC ✓{c.qc.accepted} S{c.qc.scrap} · Air-wash ✓{c.airwash.accepted} S{c.airwash.scrap} (order {ctx.line_item.order_qty}).
           To fix anything, use <b>Edit</b> on the history row above (staff only).
-          <span className="mt-2 block"><Link href={`/pallet/new?articles=${encodeURIComponent(token)}`} className="inline-block bg-slate-900 px-4 py-2 font-bold text-white">Pack Pallet →</Link></span>
+          <span className="mt-2 block"><Link href={`/pallet/new?articles=${encodeURIComponent(token)}`} className="inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-bold text-white">Pack Pallet →</Link></span>
         </div>
       )}
 
-      <details className="border bg-white p-3 text-sm">
+      <Card>
+        <CardBody className="!p-3 text-sm">
+      <details>
         <summary className="cursor-pointer font-bold">Production details (from printed label scan) — tap to expand</summary>
         {isStaff ? (
           <form onSubmit={saveDetails} className="mt-3 space-y-3">
             <div className="grid gap-2 sm:grid-cols-2">
-              <label className="block text-sm">Date
-                <input type="date" value={prodDate} onChange={(e) => setProdDate(e.target.value)} className="mt-1 w-full border p-2" />
+              <label className="block text-sm font-medium text-slate-700">Date
+                <input type="date" value={prodDate} onChange={(e) => setProdDate(e.target.value)} className={inputCls('mt-1')} />
               </label>
-              <label className="block text-sm">Shift
-                <input value={shift} onChange={(e) => setShift(e.target.value)} className="mt-1 w-full border p-2" placeholder="e.g. A" />
+              <label className="block text-sm font-medium text-slate-700">Shift
+                <input value={shift} onChange={(e) => setShift(e.target.value)} className={inputCls('mt-1')} placeholder="e.g. A" />
               </label>
-              <label className="block text-sm">Production unit no
-                <input value={unitNo} onChange={(e) => setUnitNo(e.target.value)} className="mt-1 w-full border p-2" placeholder="e.g. U1" />
+              <label className="block text-sm font-medium text-slate-700">Production unit no
+                <input value={unitNo} onChange={(e) => setUnitNo(e.target.value)} className={inputCls('mt-1')} placeholder="e.g. U1" />
               </label>
-              <label className="block text-sm">Mfg line no
-                <input value={lineNo} onChange={(e) => setLineNo(e.target.value)} className="mt-1 w-full border p-2" placeholder="e.g. L2" />
+              <label className="block text-sm font-medium text-slate-700">Mfg line no
+                <input value={lineNo} onChange={(e) => setLineNo(e.target.value)} className={inputCls('mt-1')} placeholder="e.g. L2" />
               </label>
-              <label className="block text-sm">Production supervisor
-                <input value={supervisor} onChange={(e) => setSupervisor(e.target.value)} className="mt-1 w-full border p-2" placeholder="Supervisor name" />
+              <label className="block text-sm font-medium text-slate-700">Production supervisor
+                <input value={supervisor} onChange={(e) => setSupervisor(e.target.value)} className={inputCls('mt-1')} placeholder="Supervisor name" />
               </label>
-              <label className="block text-sm">Department
-                <select value={department} onChange={(e) => setDept(e.target.value)} className="mt-1 w-full border p-2">
+              <label className="block text-sm font-medium text-slate-700">Department
+                <select value={department} onChange={(e) => setDept(e.target.value)} className={inputCls('mt-1')}>
                   <option value="bagging">Bagging</option>
                   <option value="packing">Packing</option>
                   <option value="qc">QC</option>
                 </select>
               </label>
-              <label className="block text-sm">Assigned QC tester (only they can record QC)
+              <label className="block text-sm font-medium text-slate-700">Assigned QC tester (only they can record QC)
                 {(ctx.testers || []).length > 0 ? (
-                  <select value={assignQc} onChange={(e) => setAssignQc(e.target.value)} className="mt-1 w-full border p-2">
+                  <select value={assignQc} onChange={(e) => setAssignQc(e.target.value)} className={inputCls('mt-1')}>
                     <option value="">— Not assigned (hidden from testers) —</option>
                     {(ctx.testers || []).map((t: any) => (
                       <option key={t.id} value={t.checker_code}>{t.name} ({t.checker_code})</option>
                     ))}
                   </select>
                 ) : (
-                  <input value={assignQc} onChange={(e) => setAssignQc(e.target.value)} className="mt-1 w-full border p-2" placeholder="e.g. 001" />
+                  <input value={assignQc} onChange={(e) => setAssignQc(e.target.value)} className={inputCls('mt-1')} placeholder="e.g. 001" />
                 )}
               </label>
-              <label className="block text-sm">Assigned air-wash tester (only they can record air-wash)
+              <label className="block text-sm font-medium text-slate-700">Assigned air-wash tester (only they can record air-wash)
                 {(ctx.testers || []).length > 0 ? (
-                  <select value={assignAw} onChange={(e) => setAssignAw(e.target.value)} className="mt-1 w-full border p-2">
+                  <select value={assignAw} onChange={(e) => setAssignAw(e.target.value)} className={inputCls('mt-1')}>
                     <option value="">— Not assigned (hidden from testers) —</option>
                     {(ctx.testers || []).map((t: any) => (
                       <option key={t.id} value={t.checker_code}>{t.name} ({t.checker_code})</option>
                     ))}
                   </select>
                 ) : (
-                  <input value={assignAw} onChange={(e) => setAssignAw(e.target.value)} className="mt-1 w-full border p-2" placeholder="e.g. 002" />
+                  <input value={assignAw} onChange={(e) => setAssignAw(e.target.value)} className={inputCls('mt-1')} placeholder="e.g. 002" />
                 )}
               </label>
             </div>
-            <button className="border px-4 py-2">Save assignment + details (no quantities)</button>
+            <button className={btnSecondary()}>Save assignment + details (no quantities)</button>
           </form>
         ) : (
           <div className="mt-3">
             {last ? (
-              <table className="w-full border text-sm">
+              <table className="w-full text-sm">
                 <tbody>
-                  <tr><td className="border bg-slate-50 p-1">Date</td><td className="border p-1">{String(last.production_date || '').slice(0, 10) || '—'}</td></tr>
-                  <tr><td className="border bg-slate-50 p-1">Shift</td><td className="border p-1">{last.production_shift || '—'}</td></tr>
-                  <tr><td className="border bg-slate-50 p-1">Production unit</td><td className="border p-1">{last.production_unit_no || '—'}</td></tr>
-                  <tr><td className="border bg-slate-50 p-1">Mfg line</td><td className="border p-1">{last.manufacturing_line_no || '—'}</td></tr>
-                  <tr><td className="border bg-slate-50 p-1">Supervisor</td><td className="border p-1">{last.production_supervisor_name || '—'}</td></tr>
-                  <tr><td className="border bg-slate-50 p-1">Department</td><td className="border p-1">{last.department || '—'}</td></tr>
-                  <tr><td className="border bg-slate-50 p-1">Air-wash checker</td><td className="border p-1">{last.air_wash_checker_code || '—'}</td></tr>
+                  <tr><td className="w-32 bg-slate-50 p-1.5 text-slate-500">Date</td><td className="p-1.5">{String(last.production_date || '').slice(0, 10) || '—'}</td></tr>
+                  <tr><td className="bg-slate-50 p-1.5 text-slate-500">Shift</td><td className="p-1.5">{last.production_shift || '—'}</td></tr>
+                  <tr><td className="bg-slate-50 p-1.5 text-slate-500">Production unit</td><td className="p-1.5">{last.production_unit_no || '—'}</td></tr>
+                  <tr><td className="bg-slate-50 p-1.5 text-slate-500">Mfg line</td><td className="p-1.5">{last.manufacturing_line_no || '—'}</td></tr>
+                  <tr><td className="bg-slate-50 p-1.5 text-slate-500">Supervisor</td><td className="p-1.5">{last.production_supervisor_name || '—'}</td></tr>
+                  <tr><td className="bg-slate-50 p-1.5 text-slate-500">Department</td><td className="p-1.5">{last.department || '—'}</td></tr>
+                  <tr><td className="bg-slate-50 p-1.5 text-slate-500">Air-wash checker</td><td className="p-1.5">{last.air_wash_checker_code || '—'}</td></tr>
                 </tbody>
               </table>
             ) : (
@@ -440,20 +461,26 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
           </div>
         )}
       </details>
+        </CardBody>
+      </Card>
 
-      <div className="text-sm"><b>History (never overwritten):</b>
-        {(ctx.history || []).map((h: any) => (
-          <div key={h.id} className="border-b py-1">[{((h.stage || 'qc') === 'airwash' ? 'AW' : 'QC')}][{h.department}]{h.production_date ? ` ${String(h.production_date).slice(0, 10)}` : ''} ✓{h.accepted_qty} RW{h.rework_qty} S{h.scrap_qty} — QC {h.qc_checker_code}{h.air_wash_checker_code ? ` · Air-wash ${h.air_wash_checker_code}` : ''}{h.manufacturing_line_no ? ` · Line ${h.manufacturing_line_no}` : ''}{h.production_unit_no ? ` · Unit ${h.production_unit_no}` : ''}{h.production_shift ? ` · Shift ${h.production_shift}` : ''}{h.production_supervisor_name ? ` · Sup ${h.production_supervisor_name}` : ''}{h.notes ? ` · “${h.notes}”` : ''}
-            {isStaff && (
-              <button onClick={() => setEditing({ ...h, production_date: String(h.production_date || '').slice(0, 10) })} className="ml-2 border px-2 text-xs">Edit</button>
-            )}
-          </div>
-        ))}
-        {(!ctx.history || ctx.history.length === 0) && <div className="text-slate-500">No scans yet.</div>}
-      </div>
+      <Card>
+        <CardBody className="text-sm">
+          <b>History (never overwritten):</b>
+          {(ctx.history || []).map((h: any) => (
+            <div key={h.id} className="border-b border-slate-100 py-1.5 last:border-0">[{((h.stage || 'qc') === 'airwash' ? 'AW' : 'QC')}][{h.department}]{h.production_date ? ` ${String(h.production_date).slice(0, 10)}` : ''} ✓{h.accepted_qty} RW{h.rework_qty} S{h.scrap_qty} — QC {h.qc_checker_code}{h.air_wash_checker_code ? ` · Air-wash ${h.air_wash_checker_code}` : ''}{h.manufacturing_line_no ? ` · Line ${h.manufacturing_line_no}` : ''}{h.production_unit_no ? ` · Unit ${h.production_unit_no}` : ''}{h.production_shift ? ` · Shift ${h.production_shift}` : ''}{h.production_supervisor_name ? ` · Sup ${h.production_supervisor_name}` : ''}{h.notes ? ` · “${h.notes}”` : ''}
+              {isStaff && (
+                <button onClick={() => setEditing({ ...h, production_date: String(h.production_date || '').slice(0, 10) })} className="ml-2 rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50">Edit</button>
+              )}
+            </div>
+          ))}
+          {(!ctx.history || ctx.history.length === 0) && <div className="text-slate-500">No scans yet.</div>}
+        </CardBody>
+      </Card>
       {isStaff && editing && (
+        <Card className="!border-amber-300 !bg-amber-50">
         <form
-          className="space-y-3 border border-amber-400 bg-amber-50 p-4"
+          className="space-y-3 p-4"
           onSubmit={async (e) => {
             e.preventDefault();
             setErr(''); setMsg('');
@@ -483,25 +510,26 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
         >
           <h2 className="text-sm font-bold">Correct scan #{editing.id} (prefilled — change only what&apos;s wrong)</h2>
           <div className="grid gap-2 sm:grid-cols-2">
-            <label className="block text-sm">Date<input type="date" value={editing.production_date || ''} onChange={(e) => setEditing({ ...editing, production_date: e.target.value })} className="mt-1 w-full border p-2" /></label>
-            <label className="block text-sm">Shift<input value={editing.production_shift || ''} onChange={(e) => setEditing({ ...editing, production_shift: e.target.value })} className="mt-1 w-full border p-2" /></label>
-            <label className="block text-sm">Production unit no<input value={editing.production_unit_no || ''} onChange={(e) => setEditing({ ...editing, production_unit_no: e.target.value })} className="mt-1 w-full border p-2" /></label>
-            <label className="block text-sm">Mfg line no<input value={editing.manufacturing_line_no || ''} onChange={(e) => setEditing({ ...editing, manufacturing_line_no: e.target.value })} className="mt-1 w-full border p-2" /></label>
-            <label className="block text-sm">Production supervisor<input value={editing.production_supervisor_name || ''} onChange={(e) => setEditing({ ...editing, production_supervisor_name: e.target.value })} className="mt-1 w-full border p-2" /></label>
-            <label className="block text-sm">QC tester code<input value={editing.qc_checker_code || ''} onChange={(e) => setEditing({ ...editing, qc_checker_code: e.target.value })} className="mt-1 w-full border p-2" /></label>
-            <label className="block text-sm">Air-wash checker code<input value={editing.air_wash_checker_code || ''} onChange={(e) => setEditing({ ...editing, air_wash_checker_code: e.target.value })} className="mt-1 w-full border p-2" /></label>
+            <label className="block text-sm font-medium text-slate-700">Date<input type="date" value={editing.production_date || ''} onChange={(e) => setEditing({ ...editing, production_date: e.target.value })} className={inputCls('mt-1')} /></label>
+            <label className="block text-sm font-medium text-slate-700">Shift<input value={editing.production_shift || ''} onChange={(e) => setEditing({ ...editing, production_shift: e.target.value })} className={inputCls('mt-1')} /></label>
+            <label className="block text-sm font-medium text-slate-700">Production unit no<input value={editing.production_unit_no || ''} onChange={(e) => setEditing({ ...editing, production_unit_no: e.target.value })} className={inputCls('mt-1')} /></label>
+            <label className="block text-sm font-medium text-slate-700">Mfg line no<input value={editing.manufacturing_line_no || ''} onChange={(e) => setEditing({ ...editing, manufacturing_line_no: e.target.value })} className={inputCls('mt-1')} /></label>
+            <label className="block text-sm font-medium text-slate-700">Production supervisor<input value={editing.production_supervisor_name || ''} onChange={(e) => setEditing({ ...editing, production_supervisor_name: e.target.value })} className={inputCls('mt-1')} /></label>
+            <label className="block text-sm font-medium text-slate-700">QC tester code<input value={editing.qc_checker_code || ''} onChange={(e) => setEditing({ ...editing, qc_checker_code: e.target.value })} className={inputCls('mt-1')} /></label>
+            <label className="block text-sm font-medium text-slate-700">Air-wash checker code<input value={editing.air_wash_checker_code || ''} onChange={(e) => setEditing({ ...editing, air_wash_checker_code: e.target.value })} className={inputCls('mt-1')} /></label>
           </div>
           <div className="grid grid-cols-3 gap-2">
-            <label className="block text-sm">Pass<input type="number" min={0} value={editing.accepted_qty} onChange={(e) => setEditing({ ...editing, accepted_qty: Number(e.target.value) })} className="mt-1 w-full border p-2" /></label>
-            <label className="block text-sm">Repair<input type="number" min={0} value={editing.rework_qty} onChange={(e) => setEditing({ ...editing, rework_qty: Number(e.target.value) })} className="mt-1 w-full border p-2" /></label>
-            <label className="block text-sm">Reject<input type="number" min={0} value={editing.scrap_qty} onChange={(e) => setEditing({ ...editing, scrap_qty: Number(e.target.value) })} className="mt-1 w-full border p-2" /></label>
+            <label className="block text-sm font-medium text-slate-700">Pass<input type="number" min={0} value={editing.accepted_qty} onChange={(e) => setEditing({ ...editing, accepted_qty: Number(e.target.value) })} className={inputCls('mt-1')} /></label>
+            <label className="block text-sm font-medium text-slate-700">Repair<input type="number" min={0} value={editing.rework_qty} onChange={(e) => setEditing({ ...editing, rework_qty: Number(e.target.value) })} className={inputCls('mt-1')} /></label>
+            <label className="block text-sm font-medium text-slate-700">Reject<input type="number" min={0} value={editing.scrap_qty} onChange={(e) => setEditing({ ...editing, scrap_qty: Number(e.target.value) })} className={inputCls('mt-1')} /></label>
           </div>
-          <label className="block text-sm">Remark<textarea value={editing.notes || ''} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} className="mt-1 w-full border p-2" rows={2} /></label>
+          <label className="block text-sm font-medium text-slate-700">Remark<textarea value={editing.notes || ''} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} className={inputCls('mt-1')} rows={2} /></label>
           <div className="flex gap-2">
-            <button className="bg-slate-900 px-4 py-2 text-white">Save correction</button>
-            <button type="button" onClick={() => setEditing(null)} className="border px-4 py-2">Cancel</button>
+            <button className={btnPrimary('!text-sm')}>Save correction</button>
+            <button type="button" onClick={() => setEditing(null)} className={btnSecondary('!text-sm')}>Cancel</button>
           </div>
         </form>
+        </Card>
       )}
       <p className="text-xs text-slate-500">Rework lots are re-scanned with the same QR after repair until Accepted + Scrap = Order Qty. Scrap is terminal.</p>
     </div>

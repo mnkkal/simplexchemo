@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import Nav from '@/components/Nav';
+import AppShell from '@/components/AppShell';
 import SyncWatcher from '@/components/SyncWatcher';
 
 export const metadata: Metadata = {
@@ -20,9 +20,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body className="bg-slate-50 text-slate-900">
-        <Nav />
-        <SyncWatcher />
-        <main className="mx-auto max-w-5xl p-4">{children}</main>
+        <AppShell>
+          <SyncWatcher />
+          {children}
+        </AppShell>
         <script dangerouslySetInnerHTML={{ __html: `if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}))}` }} />
       </body>
     </html>

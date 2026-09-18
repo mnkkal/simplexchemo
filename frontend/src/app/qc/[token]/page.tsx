@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { getCheckerCode, saveChecker } from '@/lib/checker';
 import { enqueue, cacheSet, cacheGet } from '@/lib/offline';
+import { Card, CardBody, PageHeader, StatusBadge, btnPrimary, btnSecondary, inputCls, labelCls } from '@/components/ui';
 
 export default function QcPage({ params }: { params: { token: string } }) {
   const token = decodeURIComponent(params.token);
@@ -64,38 +65,46 @@ export default function QcPage({ params }: { params: { token: string } }) {
 
   return (
     <div className="max-w-xl space-y-4">
-      <h1 className="text-xl font-bold">QC entry — {ctx.current_round === 'production' ? 'Round 1 · Production' : 'Round 2 · Air-wash'}</h1>
-      <div className="border bg-white p-3 text-sm">
-        <div>Unit #{ctx.unit.id} · status <b>{ctx.unit.status}</b></div>
-        <div>Order: {ctx.order.customer_name} · PO {ctx.order.purchase_order_no} · {ctx.order.article_no} · {ctx.order.bag_size}</div>
-      </div>
+      <PageHeader title={`QC entry — ${ctx.current_round === 'production' ? 'Round 1 · Production' : 'Round 2 · Air-wash'}`} />
+      <Card>
+        <CardBody className="text-sm">
+          <div>Unit #{ctx.unit.id} · status <StatusBadge status={ctx.unit.status} /></div>
+          <div className="mt-1 text-slate-600">Order: {ctx.order.customer_name} · PO {ctx.order.purchase_order_no} · {ctx.order.article_no} · {ctx.order.bag_size}</div>
+        </CardBody>
+      </Card>
       {err && <p className="text-sm text-amber-700">{err}</p>}
-      <div className="text-sm">
-        <b>History (never overwritten):</b>
-        {(ctx.rounds || []).map((r: any) => (
-          <div key={r.id} className="border-b py-1">[{r.round_type} #{r.attempt_number}] {r.remark} — {r.qc_checker_code} @ {r.tested_at || r.created_at}</div>
-        ))}
-        {(!ctx.rounds || ctx.rounds.length === 0) && <div className="text-slate-500">No attempts yet.</div>}
-      </div>
-      <form onSubmit={submit} className="space-y-3 border bg-white p-4">
-        <label className="block text-sm">Checker code (required each time)
-          <div className="flex gap-2">
-            <input value={code} onChange={(e) => setCode(e.target.value)} className="flex-1 border p-2" placeholder="e.g. QC01" />
-            <button type="button" onClick={remember} className="border px-3 text-sm">Remember device</button>
-          </div>
-        </label>
-        <div className="flex gap-2 text-sm">
-          {['pass', 'repair', 'reject'].map((r) => (
-            <label key={r} className={`flex-1 cursor-pointer border p-3 text-center ${remark === r ? 'bg-slate-900 text-white' : ''}`}>
-              <input type="radio" className="hidden" checked={remark === r} onChange={() => setRemark(r)} />{r.toUpperCase()}
-            </label>
+      <Card>
+        <CardBody className="text-sm">
+          <b>History (never overwritten):</b>
+          {(ctx.rounds || []).map((r: any) => (
+            <div key={r.id} className="border-b border-slate-100 py-1 last:border-0">[{r.round_type} #{r.attempt_number}] {r.remark} — {r.qc_checker_code} @ {r.tested_at || r.created_at}</div>
           ))}
-        </div>
-        <label className="block text-sm">Notes
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full border p-2" rows={2} />
-        </label>
-        <button className="bg-slate-900 px-4 py-2 text-white">Submit {ctx.current_round} remark</button>
-      </form>
+          {(!ctx.rounds || ctx.rounds.length === 0) && <div className="text-slate-500">No attempts yet.</div>}
+        </CardBody>
+      </Card>
+      <Card>
+        <CardBody>
+          <form onSubmit={submit} className="space-y-3">
+            <label className={labelCls()}>Checker code (required each time)
+              <div className="mt-1 flex gap-2">
+                <input value={code} onChange={(e) => setCode(e.target.value)} className={`${inputCls()} flex-1`} placeholder="e.g. QC01" />
+                <button type="button" onClick={remember} className={btnSecondary('!text-sm')}>Remember device</button>
+              </div>
+            </label>
+            <div className="flex gap-2 text-sm" role="radiogroup" aria-label="Verdict">
+              {(['pass', 'repair', 'reject'] as const).map((r) => (
+                <label key={r} className={`flex-1 cursor-pointer rounded-md border p-3 text-center font-bold ${remark === r ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700'}`}>
+                  <input type="radio" className="hidden" checked={remark === r} onChange={() => setRemark(r)} />{r.toUpperCase()}
+                </label>
+              ))}
+            </div>
+            <label className={labelCls()}>Notes
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className={inputCls('mt-1')} rows={2} />
+            </label>
+            <button className={btnPrimary()}>Submit {ctx.current_round} remark</button>
+          </form>
+        </CardBody>
+      </Card>
       {msg && <p className="text-sm text-green-700">{msg}</p>}
     </div>
   );

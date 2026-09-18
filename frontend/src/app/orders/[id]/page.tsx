@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useRequireStaff } from '@/lib/requireStaff';
 import QrLabel from '@/components/Qr';
+import { Badge, Card, CardBody, CardTitle, PageHeader } from '@/components/ui';
 
 export default function OrderDetail({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -22,15 +23,22 @@ export default function OrderDetail({ params }: { params: { id: string } }) {
   if (!order) return <p>Loading…</p>;
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">Order #{order.id} — {order.customer_name}</h1>
-      <p className="text-sm">PO {order.purchase_order_no} · {order.article_no} · {order.bag_size} · qty {order.order_qty}</p>
-      <h2 className="font-bold">Unit QR labels (first 200 shown)</h2>
-      <div className="flex flex-wrap gap-3">
-        {(order.units || []).map((u: any) => (
-          <QrLabel key={u.id} token={u.unit_qr_token} title={`Unit #${u.id}`} lines={[`Order #${order.id} · ${order.article_no}`, `Status: ${u.status}`]} />
-        ))}
-      </div>
-      <p className="text-xs text-slate-500">Each label QR opens <code>/scan/&lt;unit_token&gt;</code> — QC rounds are recorded against this same QR (no extra QR at QC stages).</p>
+      <PageHeader
+        title={`Order #${order.id} — ${order.customer_name}`}
+        subtitle={`PO ${order.purchase_order_no} · ${order.article_no} · ${order.bag_size} · qty ${order.order_qty}`}
+        actions={<Badge tone="slate">Legacy</Badge>}
+      />
+      <Card>
+        <CardBody>
+          <CardTitle>Unit QR labels (first 200 shown)</CardTitle>
+          <div className="mt-3 flex flex-wrap gap-3">
+            {(order.units || []).map((u: any) => (
+              <QrLabel key={u.id} token={u.unit_qr_token} title={`Unit #${u.id}`} lines={[`Order #${order.id} · ${order.article_no}`, `Status: ${u.status}`]} />
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-slate-500">Each label QR opens <code>/scan/&lt;unit_token&gt;</code> — QC rounds are recorded against this same QR (no extra QR at QC stages).</p>
+        </CardBody>
+      </Card>
     </div>
   );
 }

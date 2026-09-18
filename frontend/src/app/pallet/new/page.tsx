@@ -1,11 +1,13 @@
 'use client';
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { PackagePlus, Printer } from 'lucide-react';
 import { api, scanUrl } from '@/lib/api';
 import { extractToken } from '@/components/Qr';
 import { enqueue } from '@/lib/offline';
 import { useRequireStaff } from '@/lib/requireStaff';
 import { QRCodeSVG } from 'qrcode.react';
+import { Card, CardBody, PageHeader, btnPrimary, btnSecondary, inputCls, labelCls } from '@/components/ui';
 
 export default function PackPallet() {
   return (
@@ -98,44 +100,50 @@ function PackPalletForm() {
 
   return (
     <div className="max-w-xl space-y-4">
-      <h1 className="text-xl font-bold">Pallet packing → new pallet QR</h1>
-      <div className="flex gap-2 text-sm">
-        <button type="button" onClick={() => { setMode('articles'); setTokens(''); setErr(''); }} className={`border px-3 py-1 ${mode === 'articles' ? 'bg-slate-900 text-white' : ''}`}>Tested articles</button>
-        <button type="button" onClick={() => { setMode('units'); setTokens(''); setErr(''); }} className={`border px-3 py-1 ${mode === 'units' ? 'bg-slate-900 text-white' : ''}`}>Legacy units</button>
-      </div>
-      <form onSubmit={submit} className="space-y-3">
-        {mode === 'articles' ? (
-          <label className="block text-sm">Article QR tokens / scan URLs — one per line, optional pcs after a space (default: all remaining passed stock; only fully-tested articles)
-            <textarea required value={tokens} onChange={(e) => setTokens(e.target.value)} rows={5} className="w-full border p-2 font-mono text-xs" placeholder="<article token or scan URL> [pcs]" />
-          </label>
-        ) : (
-          <label className="block text-sm">Unit QR tokens / scan URLs (one per line — only fully-passed units)
-            <textarea required value={tokens} onChange={(e) => setTokens(e.target.value)} rows={5} className="w-full border p-2 font-mono text-xs" placeholder="paste tokens or full scan URLs" />
-          </label>
-        )}
-        {(['pallet_no', 'packing_date', 'packing_time', 'packing_shift', 'packing_supervisor_name', 'packing_machine_operator_name'] as const).map((k) => (
-          <label key={k} className="block text-sm">{k}
-            <input value={(f as any)[k]} onChange={(e) => set(k, e.target.value)} className="w-full border p-2" required={['pallet_no', 'packing_date', 'packing_shift'].includes(k)} />
-          </label>
-        ))}
-        {err && <p className="text-sm text-red-600">{err}</p>}
-        <button className="bg-slate-900 px-4 py-2 text-white">Save + generate pallet QR</button>
-      </form>
+      <PageHeader title="Pallet packing → new pallet QR" />
+      <Card>
+        <CardBody>
+          <div className="flex gap-2 text-sm" role="tablist" aria-label="Packing source">
+            <button type="button" onClick={() => { setMode('articles'); setTokens(''); setErr(''); }} className={`rounded-md border px-3 py-1.5 font-semibold ${mode === 'articles' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700'}`}>Tested articles</button>
+            <button type="button" onClick={() => { setMode('units'); setTokens(''); setErr(''); }} className={`rounded-md border px-3 py-1.5 font-semibold ${mode === 'units' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700'}`}>Legacy units</button>
+          </div>
+          <form onSubmit={submit} className="mt-3 space-y-3">
+            {mode === 'articles' ? (
+              <label className={labelCls()}>Article QR tokens / scan URLs — one per line, optional pcs after a space (default: all remaining passed stock; only fully-tested articles)
+                <textarea required value={tokens} onChange={(e) => setTokens(e.target.value)} rows={5} className={`${inputCls('mt-1')} font-mono !text-xs`} placeholder="<article token or scan URL> [pcs]" />
+              </label>
+            ) : (
+              <label className={labelCls()}>Unit QR tokens / scan URLs (one per line — only fully-passed units)
+                <textarea required value={tokens} onChange={(e) => setTokens(e.target.value)} rows={5} className={`${inputCls('mt-1')} font-mono !text-xs`} placeholder="paste tokens or full scan URLs" />
+              </label>
+            )}
+            <div className="grid gap-3 sm:grid-cols-2">
+              {(['pallet_no', 'packing_date', 'packing_time', 'packing_shift', 'packing_supervisor_name', 'packing_machine_operator_name'] as const).map((k) => (
+                <label key={k} className={labelCls()}>{k.replace(/_/g, ' ')}
+                  <input value={(f as any)[k]} onChange={(e) => set(k, e.target.value)} className={inputCls('mt-1')} required={['pallet_no', 'packing_date', 'packing_shift'].includes(k)} />
+                </label>
+              ))}
+            </div>
+            {err && <p className="text-sm text-red-600">{err}</p>}
+            <button className={btnPrimary()}><PackagePlus size={16} /> Save + generate pallet QR</button>
+          </form>
+        </CardBody>
+      </Card>
       {done && (
-        <div className="border bg-white p-4 text-center">
+        <Card><CardBody className="text-center">
           <b>Pallet {done.pallet_no} · {done.pallet_pcs} pcs</b>
           {(done.article_lines || []).length > 0 && (
             <div className="mx-auto mt-2 max-w-sm text-left text-sm">
               {(done.article_lines as any[]).map((l: any) => (
-                <div key={l.id} className="border-b py-1">{l.article_no} · {l.bag_size} · packed <b>{l.pivot?.qty}</b></div>
+                <div key={l.id} className="border-b border-slate-100 py-1 last:border-0">{l.article_no} · {l.bag_size} · packed <b>{l.pivot?.qty}</b></div>
               ))}
             </div>
           )}
           <QRCodeSVG value={scanUrl(done.pallet_qr_token)} size={180} className="mx-auto my-2" />
-          <div className="break-all text-xs">{scanUrl(done.pallet_qr_token)}</div>
-          <div className="text-xs text-slate-500">Brand-new token — not reused from any unit. Common info copied: {done.customer_name} · {done.purchase_order_no} · {done.article_no} · {done.bag_size}.</div>
-          <button onClick={() => window.print()} className="mt-2 border px-3 py-1 text-sm print:hidden">Print label</button>
-        </div>
+          <div className="break-all text-xs text-slate-500">{scanUrl(done.pallet_qr_token)}</div>
+          <div className="mt-1 text-xs text-slate-500">Brand-new token — not reused from any unit. Common info copied: {done.customer_name} · {done.purchase_order_no} · {done.article_no} · {done.bag_size}.</div>
+          <button onClick={() => window.print()} className={`${btnSecondary('!py-1 !text-sm')} mt-2 print:hidden`}><Printer size={14} /> Print label</button>
+        </CardBody></Card>
       )}
     </div>
   );

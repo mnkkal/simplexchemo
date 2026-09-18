@@ -1,7 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Download, LogOut, Plus } from 'lucide-react';
 import { api } from '@/lib/api';
+import { Card, CardBody, CardTitle, EmptyState, PageHeader, StatusBadge, TableWrap, btnDanger, btnPrimary, btnSecondary, inputCls, tdCls, thCls } from '@/components/ui';
 
 export default function Admin() {
   const router = useRouter();
@@ -51,13 +53,6 @@ export default function Admin() {
     } catch (ex: any) { setErr(ex.message); }
   };
 
-  const toggleChecker = async (c: any) => {
-    try {
-      const updated = await api.updateChecker(c.id, { active: !c.active });
-      setCheckers((list) => list.map((x) => (x.id === c.id ? updated : x)));
-    } catch (ex: any) { setErr(ex.message); }
-  };
-
   const saveTester = async (c: any) => {
     try {
       const updated = await api.updateChecker(c.id, {
@@ -70,11 +65,18 @@ export default function Admin() {
     } catch (ex: any) { setErr(ex.message); }
   };
 
+  const toggleChecker = async (c: any) => {
+    try {
+      const updated = await api.updateChecker(c.id, { active: !c.active });
+      setCheckers((list) => list.map((x) => (x.id === c.id ? updated : x)));
+    } catch (ex: any) { setErr(ex.message); }
+  };
+
   const removeChecker = async (c: any) => {
     if (!confirm(`Remove tester ${c.name} (${c.checker_code})?`)) return;
     try {
       await api.deleteChecker(c.id);
-      setCheckers((list) => list.filter((x) => x.id !== c.id));
+      setCheckers((list) => list.filter((x) => (x.id !== c.id)));
     } catch (ex: any) { setErr(ex.message); }
   };
 
@@ -84,107 +86,155 @@ export default function Admin() {
     router.replace('/login?next=/admin');
   };
 
+  const statCards: [string, any][] = stats ? [
+    ['POs', stats.purchase_orders ?? '—'],
+    ['Articles', `${stats.articles ?? '—'} (${stats.articles_complete ?? 0} complete)`],
+    ['Accepted', stats.article_remarks?.accepted ?? '—'],
+    ['Rework / Scrap', `${stats.article_remarks?.rework ?? '—'} / ${stats.article_remarks?.scrap ?? '—'}`],
+    ['Orders', stats.orders],
+    ['Pallets', stats.pallets],
+    ['Pass', stats.remarks.pass],
+    ['Repair / Reject', `${stats.remarks.repair} / ${stats.remarks.reject}`],
+  ] : [];
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center">
-        <h1 className="text-xl font-bold">Admin dashboard</h1>
-        <button onClick={logout} className="ml-auto border px-3 py-1 text-sm">Logout</button>
-      </div>
+    <div className="space-y-4">
+      <PageHeader
+        title="Admin dashboard"
+        subtitle="Orders, quality results, testers and exports at a glance."
+        actions={<button onClick={logout} className={btnSecondary('!px-3 !py-1.5')}><LogOut size={15} /> Logout</button>}
+      />
       {err && <p className="text-sm text-red-600">{err}</p>}
       {stats && (
         <>
-          <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-            <div className="border bg-white p-3">POs<b className="block text-xl">{stats.purchase_orders ?? '—'}</b></div>
-            <div className="border bg-white p-3">Articles<b className="block text-xl">{stats.articles ?? '—'} ({stats.articles_complete ?? 0} complete)</b></div>
-            <div className="border bg-white p-3">Accepted<b className="block text-xl">{stats.article_remarks?.accepted ?? '—'}</b></div>
-            <div className="border bg-white p-3">Rework/Scrap<b className="block text-xl">{stats.article_remarks?.rework ?? '—'}/{stats.article_remarks?.scrap ?? '—'}</b></div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {statCards.map(([label, value]) => (
+              <Card key={label}>
+                <CardBody className="!p-3">
+                  <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
+                  <div className="mt-1 text-xl font-bold text-slate-900">{value}</div>
+                </CardBody>
+              </Card>
+            ))}
           </div>
-          <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-            <div className="border bg-white p-3">Orders<b className="block text-xl">{stats.orders}</b></div>
-            <div className="border bg-white p-3">Pallets<b className="block text-xl">{stats.pallets}</b></div>
-            <div className="border bg-white p-3">Pass<b className="block text-xl">{stats.remarks.pass}</b></div>
-            <div className="border bg-white p-3">Repair/Reject<b className="block text-xl">{stats.remarks.repair}/{stats.remarks.reject}</b></div>
-          </div>
-          {([['by_line', 'production_line_no'], ['by_shift', 'production_shift'], ['by_checker', 'qc_checker_code']] as const).map(([k, col]) => (
-            <div key={k}>
-              <h2 className="font-bold">{k} (unit flow)</h2>
-              <table className="w-full border text-sm">
-                <thead><tr className="bg-slate-100"><th className="border p-1">{col}</th><th className="border p-1">total</th><th className="border p-1">pass</th><th className="border p-1">repair</th><th className="border p-1">reject</th></tr></thead>
-                <tbody>          {(stats[k] || []).map((r: any, i: number) => (
-                  <tr key={i}><td className="border p-1">{r[col] || r.qc_checker_name || '—'}</td><td className="border p-1">{r.total}</td><td className="border p-1">{r.pass}</td><td className="border p-1">{r.repair}</td><td className="border p-1">{r.reject}</td></tr>
-                ))}</tbody>
-              </table>
-            </div>
+          {([['by_line', 'production_line_no', 'By line (unit flow)'], ['by_shift', 'production_shift', 'By shift (unit flow)'], ['by_checker', 'qc_checker_code', 'By checker (unit flow)']] as const).map(([k, col, title]) => (
+            <Card key={k}>
+              <CardBody>
+                <CardTitle className="mb-2">{title}</CardTitle>
+                <TableWrap>
+                  <table className="w-full">
+                    <thead><tr><th className={thCls()}>{col}</th><th className={thCls()}>total</th><th className={thCls()}>pass</th><th className={thCls()}>repair</th><th className={thCls()}>reject</th></tr></thead>
+                    <tbody>
+                      {(stats[k] || []).map((r: any, i: number) => (
+                        <tr key={i} className="hover:bg-slate-50"><td className={tdCls()}>{r[col] || r.qc_checker_name || '—'}</td><td className={tdCls()}>{r.total}</td><td className={tdCls()}>{r.pass}</td><td className={tdCls()}>{r.repair}</td><td className={tdCls()}>{r.reject}</td></tr>
+                      ))}
+                      {(stats[k] || []).length === 0 && <tr><td colSpan={5}><EmptyState>No data yet.</EmptyState></td></tr>}
+                    </tbody>
+                  </table>
+                </TableWrap>
+              </CardBody>
+            </Card>
           ))}
-          <div>
-            <h2 className="font-bold">article_by_tester (accepted / rework / scrap)</h2>
-            <table className="w-full border text-sm">
-              <thead><tr className="bg-slate-100"><th className="border p-1">tester</th><th className="border p-1">scans</th><th className="border p-1">accepted</th><th className="border p-1">rework</th><th className="border p-1">scrap</th></tr></thead>
-              <tbody>{(stats.article_by_checker || []).map((r: any, i: number) => (
-                <tr key={i}><td className="border p-1">{r.qc_checker_code || r.qc_checker_name || '—'}</td><td className="border p-1">{r.scans}</td><td className="border p-1">{r.accepted}</td><td className="border p-1">{r.rework}</td><td className="border p-1">{r.scrap}</td></tr>
-              ))}</tbody>
-            </table>
-          </div>
-          <div>
-            <h2 className="font-bold">article_by_mfg_line (worst fail line on top)</h2>
-            <table className="w-full border text-sm">
-              <thead><tr className="bg-slate-100"><th className="border p-1">mfg line</th><th className="border p-1">scans</th><th className="border p-1">accepted</th><th className="border p-1">rework</th><th className="border p-1">scrap</th></tr></thead>
-              <tbody>{(stats.article_by_line || []).map((r: any, i: number) => (
-                <tr key={i}><td className="border p-1">{r.manufacturing_line_no || '—'}</td><td className="border p-1">{r.scans}</td><td className="border p-1">{r.accepted}</td><td className="border p-1">{r.rework}</td><td className="border p-1">{r.scrap}</td></tr>
-              ))}</tbody>
-            </table>
-          </div>
-          <div>
-            <h2 className="font-bold">daily_defects — Pass / Repair / Reject per day</h2>
-            <table className="w-full border text-sm">
-              <thead><tr className="bg-slate-100"><th className="border p-1">date</th><th className="border p-1">scans</th><th className="border p-1">pass</th><th className="border p-1">repair</th><th className="border p-1">reject</th></tr></thead>
-              <tbody>{(stats.article_daily || []).map((r: any, i: number) => (
-                <tr key={i}><td className="border p-1">{String(r.day || '').slice(0, 10)}</td><td className="border p-1">{r.scans}</td><td className="border p-1">{r.accepted}</td><td className="border p-1">{r.rework}</td><td className="border p-1">{r.scrap}</td></tr>
-              ))}</tbody>
-            </table>
-          </div>
-          <div>
-            <h2 className="font-bold">article_by_shift (pass / repair / reject)</h2>
-            <table className="w-full border text-sm">
-              <thead><tr className="bg-slate-100"><th className="border p-1">shift</th><th className="border p-1">scans</th><th className="border p-1">pass</th><th className="border p-1">repair</th><th className="border p-1">reject</th></tr></thead>
-              <tbody>{(stats.article_by_shift || []).map((r: any, i: number) => (
-                <tr key={i}><td className="border p-1">{r.production_shift || '—'}</td><td className="border p-1">{r.scans}</td><td className="border p-1">{r.accepted}</td><td className="border p-1">{r.rework}</td><td className="border p-1">{r.scrap}</td></tr>
-              ))}</tbody>
-            </table>
-          </div>
+          <Card>
+            <CardBody>
+              <CardTitle className="mb-2">Article by tester (accepted / rework / scrap)</CardTitle>
+              <TableWrap>
+                <table className="w-full">
+                  <thead><tr><th className={thCls()}>tester</th><th className={thCls()}>scans</th><th className={thCls()}>accepted</th><th className={thCls()}>rework</th><th className={thCls()}>scrap</th></tr></thead>
+                  <tbody>{(stats.article_by_checker || []).map((r: any, i: number) => (
+                    <tr key={i} className="hover:bg-slate-50"><td className={tdCls()}>{r.qc_checker_code || r.qc_checker_name || '—'}</td><td className={tdCls()}>{r.scans}</td><td className={tdCls()}>{r.accepted}</td><td className={tdCls()}>{r.rework}</td><td className={tdCls()}>{r.scrap}</td></tr>
+                  ))}</tbody>
+                </table>
+              </TableWrap>
+            </CardBody>
+          </Card>
+          <Card>
+            <CardBody>
+              <CardTitle className="mb-2">Article by mfg line (worst fail line on top)</CardTitle>
+              <TableWrap>
+                <table className="w-full">
+                  <thead><tr><th className={thCls()}>mfg line</th><th className={thCls()}>scans</th><th className={thCls()}>accepted</th><th className={thCls()}>rework</th><th className={thCls()}>scrap</th></tr></thead>
+                  <tbody>{(stats.article_by_line || []).map((r: any, i: number) => (
+                    <tr key={i} className="hover:bg-slate-50"><td className={tdCls()}>{r.manufacturing_line_no || '—'}</td><td className={tdCls()}>{r.scans}</td><td className={tdCls()}>{r.accepted}</td><td className={tdCls()}>{r.rework}</td><td className={tdCls()}>{r.scrap}</td></tr>
+                  ))}</tbody>
+                </table>
+              </TableWrap>
+            </CardBody>
+          </Card>
+          <Card>
+            <CardBody>
+              <CardTitle className="mb-2">Daily defects — Pass / Repair / Reject per day</CardTitle>
+              <TableWrap>
+                <table className="w-full">
+                  <thead><tr><th className={thCls()}>date</th><th className={thCls()}>scans</th><th className={thCls()}>pass</th><th className={thCls()}>repair</th><th className={thCls()}>reject</th></tr></thead>
+                  <tbody>{(stats.article_daily || []).map((r: any, i: number) => (
+                    <tr key={i} className="hover:bg-slate-50"><td className={tdCls()}>{String(r.day || '').slice(0, 10)}</td><td className={tdCls()}>{r.scans}</td><td className={tdCls()}>{r.accepted}</td><td className={tdCls()}>{r.rework}</td><td className={tdCls()}>{r.scrap}</td></tr>
+                  ))}</tbody>
+                </table>
+              </TableWrap>
+            </CardBody>
+          </Card>
+          <Card>
+            <CardBody>
+              <CardTitle className="mb-2">Article by shift (pass / repair / reject)</CardTitle>
+              <TableWrap>
+                <table className="w-full">
+                  <thead><tr><th className={thCls()}>shift</th><th className={thCls()}>scans</th><th className={thCls()}>pass</th><th className={thCls()}>repair</th><th className={thCls()}>reject</th></tr></thead>
+                  <tbody>{(stats.article_by_shift || []).map((r: any, i: number) => (
+                    <tr key={i} className="hover:bg-slate-50"><td className={tdCls()}>{r.production_shift || '—'}</td><td className={tdCls()}>{r.scans}</td><td className={tdCls()}>{r.accepted}</td><td className={tdCls()}>{r.rework}</td><td className={tdCls()}>{r.scrap}</td></tr>
+                  ))}</tbody>
+                </table>
+              </TableWrap>
+            </CardBody>
+          </Card>
         </>
       )}
-      <div>
-        <button onClick={exportCsv} className="bg-slate-900 px-4 py-2 text-white">Export 3-tab Excel (Order & Barcode · Production & QC · Pallet Scanner)</button>
-      </div>
-      <div>
-        <h2 className="font-bold">Testers (checker code + production line + shift)</h2>
-        <form onSubmit={addChecker} className="grid max-w-3xl gap-2 sm:grid-cols-5">
-          <input value={checker.name} onChange={(e) => setChecker({ ...checker, name: e.target.value })} placeholder="Tester name" className="border p-2" required />
-          <input value={checker.checker_code} onChange={(e) => setChecker({ ...checker, checker_code: e.target.value })} placeholder="Code e.g. T01" className="border p-2" required />
-          <input value={checker.production_line_no} onChange={(e) => setChecker({ ...checker, production_line_no: e.target.value })} placeholder="Line e.g. L2" className="border p-2" />
-          <input value={checker.production_shift} onChange={(e) => setChecker({ ...checker, production_shift: e.target.value })} placeholder="Shift e.g. A" className="border p-2" />
-          <button className="border px-4">Add</button>
-        </form>
-        <table className="mt-2 w-full max-w-5xl border text-sm">
-          <thead><tr className="bg-slate-100"><th className="border p-1">Tester name</th><th className="border p-1">Code</th><th className="border p-1">Line</th><th className="border p-1">Shift</th><th className="border p-1">Status</th><th className="border p-1">Since</th><th className="border p-1">Actions</th></tr></thead>
-          <tbody>{checkers.map((c: any) => (
-            <tr key={c.id}>
-              <td className="border p-1"><input value={c.name || ''} onChange={(e) => setCheckers((list) => list.map((x) => (x.id === c.id ? { ...x, name: e.target.value } : x)))} className="w-28 border p-1" /></td>
-              <td className="border p-1"><input value={c.checker_code || ''} onChange={(e) => setCheckers((list) => list.map((x) => (x.id === c.id ? { ...x, checker_code: e.target.value } : x)))} className="w-20 border p-1" /></td>
-              <td className="border p-1"><input value={c.production_line_no || ''} onChange={(e) => setCheckers((list) => list.map((x) => (x.id === c.id ? { ...x, production_line_no: e.target.value } : x)))} placeholder="L2" className="w-20 border p-1" /></td>
-              <td className="border p-1"><input value={c.production_shift || ''} onChange={(e) => setCheckers((list) => list.map((x) => (x.id === c.id ? { ...x, production_shift: e.target.value } : x)))} placeholder="A" className="w-16 border p-1" /></td>
-              <td className="border p-1">{c.active ? 'active' : 'inactive'}</td>
-              <td className="border p-1">{c.created_at ? String(c.created_at).slice(0, 10) : '—'}</td>
-              <td className="border p-1 space-x-1">
-                <button onClick={() => saveTester(c)} className="border px-2">Save</button>
-                <button onClick={() => toggleChecker(c)} className="border px-2">{c.active ? 'Deactivate' : 'Activate'}</button>
-                <button onClick={() => removeChecker(c)} className="border px-2 text-red-600">Remove</button>
-              </td>
-            </tr>
-          ))}</tbody>
-        </table>
-      </div>
+      <Card>
+        <CardBody>
+          <div id="export" className="scroll-mt-20" />
+          <CardTitle>Export</CardTitle>
+          <p className="mt-1 text-sm text-slate-500">Order &amp; Barcode · Production &amp; QC · Pallet Scanner · PO Articles · Article Scans</p>
+          <button onClick={exportCsv} className={btnPrimary('mt-3')}><Download size={16} /> Export Excel</button>
+        </CardBody>
+      </Card>
+      <Card>
+        <CardBody>
+          <div id="testers" className="scroll-mt-20" />
+          <CardTitle>Testers</CardTitle>
+          <p className="mt-1 text-sm text-slate-500">Checker code + production line + shift. Name and code are editable — Save applies all fields.</p>
+          <form onSubmit={addChecker} className="mt-3 grid gap-2 sm:grid-cols-5">
+            <input value={checker.name} onChange={(e) => setChecker({ ...checker, name: e.target.value })} placeholder="Tester name" className={inputCls()} required />
+            <input value={checker.checker_code} onChange={(e) => setChecker({ ...checker, checker_code: e.target.value })} placeholder="Code e.g. T01" className={inputCls()} required />
+            <input value={checker.production_line_no} onChange={(e) => setChecker({ ...checker, production_line_no: e.target.value })} placeholder="Line e.g. L2" className={inputCls()} />
+            <input value={checker.production_shift} onChange={(e) => setChecker({ ...checker, production_shift: e.target.value })} placeholder="Shift e.g. A" className={inputCls()} />
+            <button className={btnSecondary()}><Plus size={15} /> Add</button>
+          </form>
+          <div className="mt-3">
+            <TableWrap>
+              <table className="w-full">
+                <thead><tr><th className={thCls()}>Tester name</th><th className={thCls()}>Code</th><th className={thCls()}>Line</th><th className={thCls()}>Shift</th><th className={thCls()}>Status</th><th className={thCls()}>Since</th><th className={thCls()}>Actions</th></tr></thead>
+                <tbody>{checkers.map((c: any) => (
+                  <tr key={c.id} className="hover:bg-slate-50">
+                    <td className={tdCls()}><input value={c.name || ''} onChange={(e) => setCheckers((list) => list.map((x) => (x.id === c.id ? { ...x, name: e.target.value } : x)))} className={inputCls('!w-28 !px-2 !py-1')} /></td>
+                    <td className={tdCls()}><input value={c.checker_code || ''} onChange={(e) => setCheckers((list) => list.map((x) => (x.id === c.id ? { ...x, checker_code: e.target.value } : x)))} className={inputCls('!w-20 !px-2 !py-1')} /></td>
+                    <td className={tdCls()}><input value={c.production_line_no || ''} onChange={(e) => setCheckers((list) => list.map((x) => (x.id === c.id ? { ...x, production_line_no: e.target.value } : x)))} placeholder="L2" className={inputCls('!w-20 !px-2 !py-1')} /></td>
+                    <td className={tdCls()}><input value={c.production_shift || ''} onChange={(e) => setCheckers((list) => list.map((x) => (x.id === c.id ? { ...x, production_shift: e.target.value } : x)))} placeholder="A" className={inputCls('!w-16 !px-2 !py-1')} /></td>
+                    <td className={tdCls()}><StatusBadge status={c.active ? 'active' : 'inactive'} /></td>
+                    <td className={tdCls()}>{c.created_at ? String(c.created_at).slice(0, 10) : '—'}</td>
+                    <td className={tdCls()}>
+                      <div className="flex flex-wrap gap-1">
+                        <button onClick={() => saveTester(c)} className={btnSecondary('!px-2 !py-1 !text-xs')}>Save</button>
+                        <button onClick={() => toggleChecker(c)} className={btnSecondary('!px-2 !py-1 !text-xs')}>{c.active ? 'Deactivate' : 'Activate'}</button>
+                        <button onClick={() => removeChecker(c)} className={btnDanger('!px-2 !py-1 !text-xs')}>Remove</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </TableWrap>
+          </div>
+        </CardBody>
+      </Card>
     </div>
   );
 }

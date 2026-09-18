@@ -1,8 +1,10 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Plus, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useRequireStaff } from '@/lib/requireStaff';
+import { Card, CardBody, CardTitle, PageHeader, btnPrimary, btnSecondary, inputCls, labelCls } from '@/components/ui';
 
 type Row = { article_no: string; bag_size: string; order_qty: number };
 
@@ -45,31 +47,38 @@ export default function NewPO() {
 
   return (
     <form className="max-w-2xl space-y-4" onSubmit={submit}>
-      <h1 className="text-xl font-bold">New PO → 1 QR per Article</h1>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm">Customer Name
-          <input required value={customer_name} onChange={(e) => setCustomer(e.target.value)} className="mt-1 w-full border p-2" />
-        </label>
-        <label className="block text-sm">PO Number
-          <input required value={purchase_order_no} onChange={(e) => setPo(e.target.value)} className="mt-1 w-full border p-2" />
-        </label>
-      </div>
-      <h2 className="font-bold">Articles (line items)</h2>
-      {rows.map((r, i) => (
-        <div key={i} className="grid gap-2 border bg-white p-3 sm:grid-cols-[40px_1fr_1fr_110px_40px]">
-          <div className="text-sm font-bold">L{i + 1}</div>
-          <input value={r.article_no} onChange={(e) => setRow(i, 'article_no', e.target.value)} placeholder="Article No (unique)" className="border p-2 text-sm" required />
-          <input value={r.bag_size} onChange={(e) => setRow(i, 'bag_size', e.target.value)} placeholder="Bag/Batch size" className="border p-2 text-sm" required />
-          <input type="number" min={1} value={r.order_qty} onChange={(e) => setRow(i, 'order_qty', e.target.value)} placeholder="Qty" className="border p-2 text-sm" required />
-          <button type="button" disabled={rows.length === 1} onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))} className="border px-2 text-sm">✕</button>
-        </div>
-      ))}
-      <div className="flex gap-2">
-        <button type="button" onClick={() => setRows((rs) => [...rs, { article_no: '', bag_size: '', order_qty: 100 }])} className="border px-4 py-2 text-sm">+ Add article row</button>
-        <button className="bg-slate-900 px-4 py-2 text-white">Create PO + generate article QRs</button>
-      </div>
-      {err && <p className="text-sm text-red-600">{err}</p>}
-      <p className="text-xs text-slate-500">Each article gets its own line number + its own QR. Quantity stays bound to its article — no mix-ups.</p>
+      <PageHeader title="New PO → 1 QR per Article" subtitle="Quantity stays bound to its article — no mix-ups." />
+      <Card>
+        <CardBody className="grid gap-3 sm:grid-cols-2">
+          <label className={labelCls()}>Customer Name
+            <input required value={customer_name} onChange={(e) => setCustomer(e.target.value)} className={inputCls('mt-1')} />
+          </label>
+          <label className={labelCls()}>PO Number
+            <input required value={purchase_order_no} onChange={(e) => setPo(e.target.value)} className={inputCls('mt-1')} />
+          </label>
+        </CardBody>
+      </Card>
+      <Card>
+        <CardBody>
+          <CardTitle className="mb-3">Articles (line items)</CardTitle>
+          <div className="space-y-2">
+            {rows.map((r, i) => (
+              <div key={i} className="grid items-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-2 sm:grid-cols-[40px_1fr_1fr_110px_40px]">
+                <div className="text-sm font-bold text-slate-500">L{i + 1}</div>
+                <input value={r.article_no} onChange={(e) => setRow(i, 'article_no', e.target.value)} placeholder="Article No (unique)" className={inputCls('!text-sm')} required />
+                <input value={r.bag_size} onChange={(e) => setRow(i, 'bag_size', e.target.value)} placeholder="Bag/Batch size" className={inputCls('!text-sm')} required />
+                <input type="number" min={1} value={r.order_qty} onChange={(e) => setRow(i, 'order_qty', e.target.value)} placeholder="Qty" className={inputCls('!text-sm')} required />
+                <button type="button" disabled={rows.length === 1} onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))} aria-label={`Remove row ${i + 1}`} className="rounded-md border border-slate-300 p-2 text-sm text-slate-500 hover:bg-white disabled:opacity-40"><X size={14} /></button>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" onClick={() => setRows((rs) => [...rs, { article_no: '', bag_size: '', order_qty: 100 }])} className={btnSecondary('!text-sm')}><Plus size={15} /> Add article row</button>
+            <button className={btnPrimary('!text-sm')}>Create PO + generate article QRs</button>
+          </div>
+          {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
+        </CardBody>
+      </Card>
     </form>
   );
 }

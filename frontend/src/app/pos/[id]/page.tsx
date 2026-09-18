@@ -2,9 +2,11 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Download, PackagePlus, Printer } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useRequireStaff } from '@/lib/requireStaff';
 import QrLabel from '@/components/Qr';
+import { Card, CardBody, CardTitle, PageHeader, StatusBadge, TableWrap, tdCls, thCls } from '@/components/ui';
 
 export default function PODetail({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -50,36 +52,54 @@ export default function PODetail({ params }: { params: { id: string } }) {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">PO #{po.id} — {po.customer_name} · {po.purchase_order_no}</h1>
-      <div className="flex flex-wrap gap-2">
-        <button onClick={exportLabels} className="bg-slate-900 px-4 py-2 text-white">Export labels for supplier (Excel)</button>
-        <button onClick={() => window.print()} className="border px-4 py-2">Print QR sheet</button>
-        {packable.length > 0 && <Link href={packHref(packable)} className="bg-green-700 px-4 py-2 text-white">Pack all complete ({packable.length}) →</Link>}
-      </div>
+      <PageHeader
+        title={`PO #${po.id} — ${po.customer_name} · ${po.purchase_order_no}`}
+        actions={<>
+          <button onClick={exportLabels} className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-700"><Download size={15} /> Export labels</button>
+          <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"><Printer size={15} /> Print QR sheet</button>
+          {packable.length > 0 && <Link href={packHref(packable)} className="inline-flex items-center gap-1.5 rounded-md bg-green-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-600"><PackagePlus size={15} /> Pack all complete ({packable.length})</Link>}
+        </>}
+      />
       {msg && <p className="text-sm text-green-700">{msg}</p>}
-      <table className="w-full border bg-white text-sm">
-        <thead><tr className="bg-slate-100"><th className="border p-1">Line</th><th className="border p-1">Article</th><th className="border p-1">Bag size</th><th className="border p-1">Qty</th><th className="border p-1">Accepted</th><th className="border p-1">Rework</th><th className="border p-1">Scrap</th><th className="border p-1">Pending</th><th className="border p-1">Status</th></tr></thead>
-        <tbody>{lines.map((l: any) => (
-          <tr key={l.id}>
-            <td className="border p-1">{l.line_number}</td>
-            <td className="border p-1"><Link href={`/articles/${l.article_qr_token}`} className="underline">{l.article_no}</Link></td>
-            <td className="border p-1">{l.bag_size}</td>
-            <td className="border p-1">{l.order_qty}</td>
-            <td className="border p-1">{l.counters?.accepted ?? '—'}</td>
-            <td className="border p-1">{l.counters?.rework ?? '—'}</td>
-            <td className="border p-1">{l.counters?.scrap ?? '—'}</td>
-            <td className="border p-1">{l.counters?.pending ?? '—'}</td>
-            <td className="border p-1">{l.status}{l.counters?.complete ? ' ✅' : ''}{l.counters?.complete && l.article_qr_token ? (<> <Link href={packHref([l])} className="underline">Pack</Link></>) : ''}</td>
-          </tr>
-        ))}</tbody>
-      </table>
-      <h2 className="font-bold">Article QR labels — 1 QR per article (all copies of one label encode the same token)</h2>
-      <div className="flex flex-wrap gap-3">
-        {lines.map((l: any) => (
-          <QrLabel key={l.id} token={l.article_qr_token} title={`L${l.line_number} · ${l.article_no}`} lines={[`PO ${po.purchase_order_no} · ${l.bag_size} · Qty ${l.order_qty}`, `Status: ${l.status}`]} />
-        ))}
-      </div>
-      <p className="text-xs text-slate-500">Same QR is pasted on every bag of that article. Scanning it opens <code>/scan/&lt;article_token&gt;</code> with PO + article details.</p>
+      <Card>
+        <CardBody className="!p-0">
+          <TableWrap>
+            <table className="w-full">
+              <thead><tr><th className={thCls()}>Line</th><th className={thCls()}>Article</th><th className={thCls()}>Bag size</th><th className={thCls()}>Qty</th><th className={thCls()}>Accepted</th><th className={thCls()}>Rework</th><th className={thCls()}>Scrap</th><th className={thCls()}>Pending</th><th className={thCls()}>Status</th></tr></thead>
+              <tbody>{lines.map((l: any) => (
+                <tr key={l.id} className="hover:bg-slate-50">
+                  <td className={tdCls()}>{l.line_number}</td>
+                  <td className={tdCls()}><Link href={`/articles/${l.article_qr_token}`} className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-2 hover:decoration-slate-600">{l.article_no}</Link></td>
+                  <td className={tdCls()}>{l.bag_size}</td>
+                  <td className={tdCls()}>{l.order_qty}</td>
+                  <td className={tdCls()}>{l.counters?.accepted ?? '—'}</td>
+                  <td className={tdCls()}>{l.counters?.rework ?? '—'}</td>
+                  <td className={tdCls()}>{l.counters?.scrap ?? '—'}</td>
+                  <td className={tdCls()}>{l.counters?.pending ?? '—'}</td>
+                  <td className={tdCls()}>
+                    <span className="inline-flex items-center gap-1.5">
+                      <StatusBadge status={l.status} />
+                      {l.counters?.complete && l.article_qr_token && <Link href={packHref([l])} className="text-xs font-semibold text-green-700 underline underline-offset-2">Pack</Link>}
+                    </span>
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </TableWrap>
+        </CardBody>
+      </Card>
+      <Card>
+        <CardBody>
+          <CardTitle>Article QR labels</CardTitle>
+          <p className="mt-1 text-sm text-slate-500">1 QR per article (all copies of one label encode the same token).</p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            {lines.map((l: any) => (
+              <QrLabel key={l.id} token={l.article_qr_token} title={`L${l.line_number} · ${l.article_no}`} lines={[`PO ${po.purchase_order_no} · ${l.bag_size} · Qty ${l.order_qty}`, `Status: ${l.status}`]} />
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-slate-500">Same QR is pasted on every bag of that article. Scanning it opens <code>/scan/&lt;article_token&gt;</code> with PO + article details.</p>
+        </CardBody>
+      </Card>
     </div>
   );
 }

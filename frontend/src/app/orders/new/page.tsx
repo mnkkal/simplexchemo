@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useRequireStaff } from '@/lib/requireStaff';
+import { Card, CardBody, PageHeader, btnPrimary, inputCls, labelCls } from '@/components/ui';
 
 export default function NewOrder() {
   const router = useRouter();
@@ -13,7 +14,7 @@ export default function NewOrder() {
   if (!allowed) return <p>Checking staff login…</p>;
   return (
     <form
-      className="max-w-lg space-y-3"
+      className="max-w-lg space-y-4"
       onSubmit={async (e) => {
         e.preventDefault();
         setErr('');
@@ -26,17 +27,21 @@ export default function NewOrder() {
         }
       }}
     >
-      <h1 className="text-xl font-bold">New order → generate unit QRs</h1>
-      {['customer_name', 'purchase_order_no', 'article_no', 'bag_size'].map((k) => (
-        <label key={k} className="block text-sm">{k}
-          <input required value={(f as any)[k]} onChange={(e) => set(k, e.target.value)} className="mt-1 w-full border p-2" />
-        </label>
-      ))}
-      <label className="block text-sm">order_qty
-        <input required type="number" min={1} value={f.order_qty} onChange={(e) => set('order_qty', e.target.value)} className="mt-1 w-full border p-2" />
-      </label>
-      {err && <p className="text-sm text-red-600">{err}</p>}
-      <button className="bg-slate-900 px-4 py-2 text-white">Create + generate QRs</button>
+      <PageHeader title="New order → generate unit QRs" subtitle="Legacy per-unit flow." />
+      <Card>
+        <CardBody className="space-y-3">
+          {['customer_name', 'purchase_order_no', 'article_no', 'bag_size'].map((k) => (
+            <label key={k} className={labelCls()}>{k.replace(/_/g, ' ')}
+              <input required value={(f as any)[k]} onChange={(e) => set(k, e.target.value)} className={inputCls('mt-1')} />
+            </label>
+          ))}
+          <label className={labelCls()}>order qty
+            <input required type="number" min={1} value={f.order_qty} onChange={(e) => set('order_qty', e.target.value)} className={inputCls('mt-1')} />
+          </label>
+          {err && <p className="text-sm text-red-600">{err}</p>}
+          <button className={btnPrimary()}>Create + generate QRs</button>
+        </CardBody>
+      </Card>
     </form>
   );
 }

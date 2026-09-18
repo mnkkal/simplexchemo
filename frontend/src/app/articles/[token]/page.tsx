@@ -269,6 +269,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
         <div className="border border-green-600 bg-green-50 p-4 text-sm">
           <b>✅ Article complete — both levels done, no further entry needed.</b> QC ✓{c.qc.accepted} S{c.qc.scrap} · Air-wash ✓{c.airwash.accepted} S{c.airwash.scrap} (order {ctx.line_item.order_qty}).
           To fix anything, use <b>Edit</b> on the history row above (staff only).
+          <span className="mt-2 block"><Link href={`/pallet/new?articles=${encodeURIComponent(token)}`} className="inline-block bg-slate-900 px-4 py-2 font-bold text-white">Pack Pallet →</Link></span>
         </div>
       )}
 

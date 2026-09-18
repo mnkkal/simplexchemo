@@ -1,6 +1,6 @@
 'use client';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api, scanUrl } from '@/lib/api';
 import { extractToken } from '@/components/Qr';
 import { enqueue } from '@/lib/offline';
@@ -8,7 +8,16 @@ import { useRequireStaff } from '@/lib/requireStaff';
 import { QRCodeSVG } from 'qrcode.react';
 
 export default function PackPallet() {
+  return (
+    <Suspense fallback={<p>Loading…</p>}>
+      <PackPalletForm />
+    </Suspense>
+  );
+}
+
+function PackPalletForm() {
   const router = useRouter();
+  const params = useSearchParams();
   const allowed = useRequireStaff('/pallet/new');
   const [mode, setMode] = useState<'articles' | 'units'>('articles');
   const [tokens, setTokens] = useState('');
@@ -16,6 +25,17 @@ export default function PackPallet() {
   const [err, setErr] = useState('');
   const [done, setDone] = useState<any>(null);
   const set = (k: string, v: any) => setF((s) => ({ ...s, [k]: v }));
+
+  // Prefill from a completed article page (?articles=<token>&...).
+  // Date/time already autofill (today / now at submit).
+  useEffect(() => {
+    const pre = params.getAll('articles').filter(Boolean);
+    if (pre.length > 0) {
+      setMode('articles');
+      setTokens(pre.join('\n'));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();

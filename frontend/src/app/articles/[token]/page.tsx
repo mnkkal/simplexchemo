@@ -69,9 +69,10 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
     if (localStorage.getItem('staff_token')) return c;
     const mine = getCheckerCode();
     if (!mine) return { ...c, history: [], by_checker: [], by_airwash: [] };
+    const owns = (h: any) => ((h.stage || 'qc') === 'airwash' ? h.air_wash_checker_code === mine : h.qc_checker_code === mine);
     return {
       ...c,
-      history: (c.history || []).filter((h: any) => h.qc_checker_code === mine || h.air_wash_checker_code === mine),
+      history: (c.history || []).filter(owns),
       by_checker: (c.by_checker || []).filter((r: any) => r.key === mine),
       by_airwash: (c.by_airwash || []).filter((r: any) => r.key === mine),
     };

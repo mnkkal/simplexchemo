@@ -28,8 +28,12 @@ class ArticleScanController extends Controller
         $byLine = $this->breakdown($line, 'manufacturing_line_no', $line->openStage() ?? 'airwash');
         if (!$staff) {
             if ($checker) {
-                $history = $history->filter(fn ($s) => $s->qc_checker_code === $checker->checker_code
-                    || $s->air_wash_checker_code === $checker->checker_code)->values();
+                // Stage-aware ownership: QC rows belong to their QC tester,
+                // Air-wash rows to their air-wash tester. (The details-form
+                // air-wash label on a QC row is a plan, not ownership.)
+                $history = $history->filter(fn ($s) => ($s->stage ?? 'qc') === 'airwash'
+                    ? $s->air_wash_checker_code === $checker->checker_code
+                    : $s->qc_checker_code === $checker->checker_code)->values();
                 $byChecker = array_values(array_filter($byChecker, fn ($r) => $r['key'] === $checker->checker_code));
                 $byAirwash = array_values(array_filter($byAirwash, fn ($r) => $r['key'] === $checker->checker_code));
             } else {
@@ -113,6 +117,14 @@ class ArticleScanController extends Controller
         $checker = QcChecker::where('checker_code', $data['qc_checker_code'])->where('active', true)->first();
         if (!$checker) {
             return response()->json(['message' => 'Invalid checker code '.$data['qc_checker_code'].' — create it in Admin → Testers first'], 422);
+        }
+
+        // Identity binding (§7): staff may record for any valid code, but a
+        // tester submits only as themselves — never as another tester, never
+        // anonymous. The device token must match the submitted code.
+        [$staff, $viewer] = $this->resolveViewer($request);
+        if (!$staff && (!$viewer || $viewer->checker_code !== $checker->checker_code)) {
+            return response()->json(['message' => 'Submit verdicts as yourself — log in as tester '.$checker->checker_code.' first'], 401);
         }
 
         // Air-wash QC checker must also be a valid active tester when provided.

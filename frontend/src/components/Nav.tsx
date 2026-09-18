@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { clearChecker } from '@/lib/checker';
 
 export default function Nav() {
   const router = useRouter();
@@ -35,6 +36,12 @@ export default function Nav() {
     setStaffUser('');
     router.push('/login');
   };
+  const logoutTester = () => {
+    clearChecker();
+    setTester('');
+    setTesterName('');
+    router.push('/tester');
+  };
   return (
     <nav className="sticky top-0 z-10 bg-slate-900 text-white">
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-4 py-3">
@@ -53,6 +60,7 @@ export default function Nav() {
             <Link href="/tester/dashboard#queue" className="text-sm opacity-90 hover:opacity-100">Queue</Link>
             <Link href="/tester/dashboard#history" className="text-sm opacity-90 hover:opacity-100">History</Link>
             <Link href="/tester/dashboard#profile" className="text-sm opacity-90 hover:opacity-100">Profile</Link>
+            <button onClick={logoutTester} className="text-sm opacity-90 hover:opacity-100">Logout</button>
             <span title="Tester session active on this browser" className="rounded bg-amber-600 px-2 py-0.5 text-xs">Tester: {testerName ? `${testerName} (${tester})` : tester}</span>
           </>
         ) : (

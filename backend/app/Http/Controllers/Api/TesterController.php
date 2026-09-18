@@ -27,8 +27,10 @@ class TesterController extends Controller
 
         $scans = ArticleScan::with('lineItem.purchaseOrder')
             ->where(function ($q) use ($checker) {
-                $q->where('qc_checker_code', $checker->checker_code)
-                    ->orWhere('air_wash_checker_code', $checker->checker_code);
+                // Stage-aware ownership: QC rows belong to their QC tester,
+                // Air-wash rows to their air-wash tester.
+                $q->where(fn ($q2) => $q2->where('stage', 'qc')->where('qc_checker_code', $checker->checker_code))
+                    ->orWhere(fn ($q2) => $q2->where('stage', 'airwash')->where('air_wash_checker_code', $checker->checker_code));
             })
             ->orderByDesc('id')
             ->limit(200)

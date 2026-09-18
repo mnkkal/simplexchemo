@@ -16,7 +16,9 @@ function deviceHeader(): HeadersInit {
 async function req(path: string, init?: RequestInit) {
   const res = await fetch(`${API}${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...authHeaders(), ...(init?.headers || {}) },
+    // Device token rides on every call when present, so offline-synced
+    // verdicts also authenticate as the tester on retry.
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...authHeaders(), ...deviceHeader(), ...(init?.headers || {}) },
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

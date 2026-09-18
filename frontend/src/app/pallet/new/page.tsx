@@ -26,13 +26,24 @@ function PackPalletForm() {
   const [done, setDone] = useState<any>(null);
   const set = (k: string, v: any) => setF((s) => ({ ...s, [k]: v }));
 
-  // Prefill from a completed article page (?articles=<token>&...).
-  // Date/time already autofill (today / now at submit).
+  // Prefill from a completed article/PO page (?articles=<token>&...).
+  // Date/time already autofill (today / now at submit); shift + supervisor
+  // come from the first article's last scan.
   useEffect(() => {
     const pre = params.getAll('articles').filter(Boolean);
     if (pre.length > 0) {
       setMode('articles');
       setTokens(pre.join('\n'));
+      api.articleContext(pre[0]).then((c: any) => {
+        const hist = c.history || [];
+        const last = hist[hist.length - 1];
+        if (!last) return;
+        setF((s) => ({
+          ...s,
+          packing_shift: last.production_shift || s.packing_shift,
+          packing_supervisor_name: last.production_supervisor_name || s.packing_supervisor_name,
+        }));
+      }).catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

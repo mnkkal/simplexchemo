@@ -45,6 +45,8 @@ export default function PODetail({ params }: { params: { id: string } }) {
   if (err) return <p className="text-sm text-red-600">{err}</p>;
   if (!po) return <p>Loading…</p>;
   const lines = po.line_items || po.lineItems || [];
+  const packable = lines.filter((l: any) => l.counters?.complete && l.article_qr_token);
+  const packHref = (ls: any[]) => `/pallet/new?${ls.map((l: any) => `articles=${encodeURIComponent(l.article_qr_token)}`).join('&')}`;
 
   return (
     <div className="space-y-4">
@@ -52,6 +54,7 @@ export default function PODetail({ params }: { params: { id: string } }) {
       <div className="flex flex-wrap gap-2">
         <button onClick={exportLabels} className="bg-slate-900 px-4 py-2 text-white">Export labels for supplier (Excel)</button>
         <button onClick={() => window.print()} className="border px-4 py-2">Print QR sheet</button>
+        {packable.length > 0 && <Link href={packHref(packable)} className="bg-green-700 px-4 py-2 text-white">Pack all complete ({packable.length}) →</Link>}
       </div>
       {msg && <p className="text-sm text-green-700">{msg}</p>}
       <table className="w-full border bg-white text-sm">
@@ -66,7 +69,7 @@ export default function PODetail({ params }: { params: { id: string } }) {
             <td className="border p-1">{l.counters?.rework ?? '—'}</td>
             <td className="border p-1">{l.counters?.scrap ?? '—'}</td>
             <td className="border p-1">{l.counters?.pending ?? '—'}</td>
-            <td className="border p-1">{l.status}{l.counters?.complete ? ' ✅' : ''}</td>
+            <td className="border p-1">{l.status}{l.counters?.complete ? ' ✅' : ''}{l.counters?.complete && l.article_qr_token ? (<> <Link href={packHref([l])} className="underline">Pack</Link></>) : ''}</td>
           </tr>
         ))}</tbody>
       </table>

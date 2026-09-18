@@ -24,15 +24,21 @@ export default function PackPallet() {
     if (mode === 'articles') {
       // One per line: "<article token or scan URL> [pcs]" — pcs defaults to
       // all remaining passed stock. Only fully-tested articles pack.
-      const articles = tokens.split('\n').map((ln) => ln.trim()).filter(Boolean).map((ln) => {
+      // Anything that doesn't look like a token (min 8 chars) is rejected
+      // up front with the line number instead of failing the whole pallet.
+      const articles: { article_token: string; qty?: number }[] = [];
+      const bad: string[] = [];
+      tokens.split('\n').map((ln) => ln.trim()).filter(Boolean).forEach((ln, i) => {
         const parts = ln.split(/\s+/);
         const last = parts[parts.length - 1];
         let qty: number | undefined;
         let tokStr = ln;
         if (parts.length > 1 && /^\d+$/.test(last)) { qty = Number(last); tokStr = parts.slice(0, -1).join(' '); }
         const t = extractToken(tokStr);
-        return t ? { article_token: t, ...(qty ? { qty } : {}) } : null;
-      }).filter(Boolean);
+        if (!t || t.length < 8) { bad.push(`line ${i + 1} (“${ln}”)`); return; }
+        articles.push(qty ? { article_token: t, qty } : { article_token: t });
+      });
+      if (bad.length > 0) { setErr(`These lines don't look like article QRs — remove or fix them: ${bad.join(', ')}.`); return; }
       if (articles.length === 0) { setErr('Paste at least one article QR token or scan URL (optional pcs after a space).'); return; }
       pack.articles = articles;
     } else {
@@ -40,6 +46,8 @@ export default function PackPallet() {
         const m = t.match(/scan\/([A-Za-z0-9]+)/);
         return m ? m[1] : t;
       }).filter(Boolean);
+      const badUnit = unit_tokens.find((t) => t.length < 8);
+      if (badUnit) { setErr(`“${badUnit}” doesn't look like a unit QR token — paste full tokens or scan URLs.`); return; }
       if (unit_tokens.length === 0) { setErr('Paste at least one unit QR token or scan URL.'); return; }
       pack.unit_tokens = unit_tokens;
     }

@@ -57,6 +57,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/checkers/{checker}', [CheckerController::class, 'destroy']);
     // Staff-only correction of an existing article scan (prefilled edit, no re-entry).
     Route::patch('/article-scans/{scan}', [ArticleScanController::class, 'update']);
+    // Staff-only: replacement inflow for scrapped units (heals both levels' pools).
+    Route::post('/articles/{token}/replacements', [ArticleScanController::class, 'addReplacement']);
     Route::get('/dashboard', [DashboardController::class, 'stats']);
     Route::get('/export', [DashboardController::class, 'export']);
 });

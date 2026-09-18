@@ -29,6 +29,9 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
   // Tester verdict: quantity (one unit per scan — defaults to 1 so a tap
   // never wipes the whole pending balance) + chosen remark + remark text.
   const [verdictQty, setVerdictQty] = useState(1);
+  // Testing level picked by the tester — balances are per level.
+  const [stageSel, setStageSel] = useState<'qc' | 'airwash'>('qc');
+  const [replQty, setReplQty] = useState(1);
   const [pendingVerdict, setPendingVerdict] = useState<'repair' | 'reject' | null>(null);
   const [remark, setRemark] = useState('');
   const [isStaff, setIsStaff] = useState(false);
@@ -82,6 +85,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
         const hist = c.history || [];
         prefillFrom(hist[hist.length - 1]);
         setVerdictQty(1);
+        if (c.stage === 'airwash') setStageSel('airwash');
       }
     } catch (ex: any) {
       const cached = await cacheGet(`article:${token}`);
@@ -91,6 +95,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
           const hist = cached.history || [];
           prefillFrom(hist[hist.length - 1]);
           setVerdictQty(1);
+          if ((cached as any).stage === 'airwash') setStageSel('airwash');
         }
       }
       else setErr(ex.message);
@@ -130,28 +135,31 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
   };
 
   // Tester verdict: Pass submits at once; Repair/Reject go through a remark step.
+  // The tester picks the level (tabs); each level enforces its own balance.
   const submitVerdict = async (v: 'pass' | 'repair' | 'reject', remarkText: string) => {
     setErr(''); setMsg('');
     if (!code.trim()) { setErr('Log in as a tester first.'); return; }
     const qty = Number(verdictQty);
     if (!qty || qty < 1) { setErr('Enter quantity ≥ 1.'); return; }
-    // Live pending: the other tester may have recorded since this page
-    // opened — both see the same shared balance, so re-check it now.
-    let pending = ctx?.counters?.pending ?? 0;
+    // Live balance of the SELECTED level (a teammate may have recorded).
+    const selOf = (cc: any) => (stageSel === 'airwash' ? cc?.counters?.airwash : cc?.counters?.qc);
+    let pending = selOf(ctx)?.pending ?? 0;
     try {
       const live = await api.articleContext(token);
-      setCtx(scopeToViewer(live));
-      pending = live.counters?.pending ?? 0;
+      const scoped = scopeToViewer(live);
+      setCtx(scoped);
+      pending = selOf(scoped)?.pending ?? 0;
     } catch { /* offline: fall back to the shown balance */ }
-    if (qty > pending) { setErr(`Only ${pending} pending now — a teammate just recorded. Quantity adjusted.`); setVerdictQty(Math.max(1, pending)); await load(); return; }
+    if (qty > pending) { setErr(`Only ${pending} pending now at ${stageSel === 'airwash' ? 'Air-wash' : 'QC'} — a teammate just recorded. Quantity adjusted.`); setVerdictQty(Math.max(1, pending)); await load(); return; }
     if (v !== 'pass' && !remarkText.trim()) { setErr('Add a remark for Repair / Reject.'); return; }
-    // Safety: Passing/Rejecting the whole balance finishes the article and
-    // can't be undone (only staff can correct via Edit) — confirm explicitly.
+    // Safety: finishing the level balance can't be undone (only staff can
+    // correct via Edit) — confirm explicitly.
     if ((v === 'pass' || v === 'reject') && pending > 1 && qty >= pending) {
-      if (!window.confirm(`Record ${qty} and finish this article (pending becomes 0)? This can't be undone.`)) return;
+      if (!window.confirm(`Record ${qty} and finish ${stageSel === 'airwash' ? 'Air-wash' : 'QC'} (pending becomes 0)? This can't be undone.`)) return;
     }
     const payload = {
       ...basePayload(),
+      stage: stageSel,
       accepted_qty: v === 'pass' ? qty : 0,
       rework_qty: v === 'repair' ? qty : 0,
       scrap_qty: v === 'reject' ? qty : 0,
@@ -161,7 +169,8 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
       const r = await api.submitArticleScan(payload);
       try { await api.verifyChecker(code.trim()).then((c: any) => { saveChecker(code.trim(), c.device_token, c.name); setTesterName(c.name); setTesterSession(true); }); } catch {}
       const label = v === 'pass' ? 'Pass' : v === 'repair' ? 'Repair' : 'Reject';
-      setMsg(`Recorded ${label} ${qty} ✓ Now: accepted ${r.counters.accepted}, pending ${r.counters.pending}. Back to scan…`);
+      const rc = stageSel === 'airwash' ? r.counters.airwash : r.counters.qc;
+      setMsg(`Recorded ${label} ${qty} (${stageSel === 'airwash' ? 'Air-wash' : 'QC'}) ✓ Now: accepted ${rc.accepted}, pending ${rc.pending}. Back to scan…`);
       setPendingVerdict(null); setRemark('');
       setVerdictQty(1);
       await load();
@@ -198,6 +207,8 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
   const c = ctx.counters;
   const pct = (n: number) => ctx.line_item.order_qty ? Math.round((n / ctx.line_item.order_qty) * 100) : 0;
   const last: any = (ctx.history || [])[(ctx.history || []).length - 1];
+  // Selected testing level drives the verdict form (each level: own balance).
+  const sel = stageSel === 'airwash' ? c.airwash : c.qc;
 
   return (
     <div className="max-w-2xl space-y-4">
@@ -209,8 +220,31 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
       <div className="border bg-white p-3 text-sm">
         <b>Level 1 · QC:</b> ✓{c.qc.accepted}/{ctx.line_item.order_qty} · RW{c.qc.rework} · S{c.qc.scrap} {c.qc.complete ? '✅' : <>· pending <b>{c.qc.pending}</b></>}<br />
         <b>Level 2 · Air-wash:</b> ✓{c.airwash.accepted}/{ctx.line_item.order_qty} · RW{c.airwash.rework} · S{c.airwash.scrap} {c.airwash.complete ? '✅' : <>· pending <b>{c.airwash.pending}</b></>}
-        {!c.complete && <div className="mt-1">Recording verdict as: <b>{c.stage === 'airwash' ? 'Air-wash (QC done ✓)' : 'QC'}</b></div>}
       </div>
+      {isStaff && (
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setErr(''); setMsg('');
+            const q = Number(replQty);
+            if (!q || q < 1) { setErr('Enter replacement quantity ≥ 1.'); return; }
+            try {
+              const r: any = await api.addReplacement(token, q);
+              setMsg(`Recorded ${q} replacement unit(s) ✓ Testable pool now ${r.pool_qty}.`);
+              setReplQty(1);
+              await load();
+            } catch (ex: any) { setErr(ex.message); }
+          }}
+          className="border bg-white p-3 text-sm"
+        >
+          <b>Replacement units</b> (fresh bags produced for scrapped ones — enlarges both levels' pools)
+          <div className="mt-1 flex items-center gap-2">
+            <input type="number" min={1} value={replQty} onChange={(e) => setReplQty(Number(e.target.value))} className="w-24 border p-2" />
+            <button className="border px-4 py-2">Add</button>
+            {(ctx.line_item.replacement_qty || 0) > 0 && <span className="text-slate-500">Recorded so far: {ctx.line_item.replacement_qty}</span>}
+          </div>
+        </form>
+      )}
       {err && <p className="text-sm text-red-600">{err}</p>}
       {msg && <p className="text-sm text-green-700">{msg}{testerSession && (<> <Link href="/tester/dashboard#scan" className="underline">Scan next QR →</Link></>)}</p>}
       <div className="grid gap-3 text-sm sm:grid-cols-2">
@@ -227,7 +261,11 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
 
       {!c.complete && testerSession && (
         <div className="space-y-3 border bg-white p-4">
-          <h2 className="text-sm font-bold">Tester verdict (pending {c.pending})</h2>
+          <h2 className="text-sm font-bold">Tester verdict ({stageSel === 'airwash' ? 'Air-wash' : 'QC'} pending {sel.pending})</h2>
+          <div className="flex gap-2 text-sm" role="tablist" aria-label="Testing level">
+            <button type="button" onClick={() => { setErr(''); setStageSel('qc'); setVerdictQty(1); }} className={`border px-4 py-2 font-bold ${stageSel === 'qc' ? 'bg-slate-900 text-white' : ''}`}>Level 1 · QC ({c.qc.pending} left)</button>
+            <button type="button" onClick={() => { setErr(''); setStageSel('airwash'); setVerdictQty(1); }} className={`border px-4 py-2 font-bold ${stageSel === 'airwash' ? 'bg-slate-900 text-white' : ''}`}>Level 2 · Air-wash ({c.airwash.pending} left)</button>
+          </div>
           {testerName ? (
             <p className="text-sm">Logged in as <b>{testerName} ({code})</b> · <Link href={`/tester?next=/articles/${token}`} className="underline">switch</Link></p>
           ) : (
@@ -236,8 +274,8 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
               <Link href={`/tester?next=/articles/${token}`} className="ml-2 underline">Tester login</Link>
             </p>
           )}
-          <label className="block text-sm">Quantity (max {c.pending})
-            <input type="number" min={1} max={c.pending} value={verdictQty} onChange={(e) => setVerdictQty(Number(e.target.value))} className="mt-1 w-full border p-2" />
+          <label className="block text-sm">Quantity (max {sel.pending})
+            <input type="number" min={1} max={sel.pending} value={verdictQty} onChange={(e) => setVerdictQty(Number(e.target.value))} className="mt-1 w-full border p-2" />
           </label>
           <div className="grid grid-cols-3 gap-2">
             <button onClick={() => submitVerdict('pass', '')} className="bg-green-700 px-4 py-3 font-bold text-white">✓ Pass</button>

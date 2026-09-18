@@ -40,20 +40,44 @@ class PoLineItem extends Model
         return $this->hasMany(ArticleScan::class);
     }
 
-    /** Per-level counters: each level covers the full order qty on its own. */
+    /** Testable pool: customer order + replacement inflow for scrapped units. */
+    public function poolQty(): int
+    {
+        return $this->order_qty + (int) ($this->replacement_qty ?? 0);
+    }
+
+    /**
+     * Per-level counters. QC covers the pool; Air-wash covers the pool minus
+     * QC-scrapped units (dead bags never reach air-wash — replacements heal
+     * the pool when staff records them).
+     */
     public function stageCounters(string $stage): array
     {
+        $pool = $this->poolQty();
         $accepted = (int) $this->scans()->where('stage', $stage)->sum('accepted_qty');
         $rework = (int) $this->scans()->where('stage', $stage)->sum('rework_qty');
         $scrap = (int) $this->scans()->where('stage', $stage)->sum('scrap_qty');
-        $pending = max(0, $this->order_qty - $accepted - $scrap);
+        if ($stage === 'airwash') {
+            $qcScrap = (int) $this->scans()->where('stage', 'qc')->sum('scrap_qty');
+            $target = max(0, $pool - $qcScrap);
+            $pending = max(0, $target - $accepted - $scrap);
+
+            return [
+                'accepted' => $accepted,
+                'rework' => $rework,
+                'scrap' => $scrap,
+                'pending' => $pending,
+                'complete' => ($accepted + $scrap) >= $target,
+            ];
+        }
+        $pending = max(0, $pool - $accepted - $scrap);
 
         return [
             'accepted' => $accepted,
             'rework' => $rework,
             'scrap' => $scrap,
             'pending' => $pending,
-            'complete' => ($accepted + $scrap) >= $this->order_qty,
+            'complete' => ($accepted + $scrap) >= $pool,
         ];
     }
 

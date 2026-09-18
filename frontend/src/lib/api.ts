@@ -39,6 +39,7 @@ export const api = {
   articleContext: (token: string) => req(`/articles/${token}`, { headers: deviceHeader() }),
   submitArticleScan: (data: any) => req('/article-scans', { method: 'POST', body: JSON.stringify(data) }),
   updateArticleScan: (id: number, data: any) => req(`/article-scans/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  addReplacement: (token: string, qty: number) => req(`/articles/${encodeURIComponent(token)}/replacements`, { method: 'POST', body: JSON.stringify({ qty }) }),
   // QC
   qcContext: (token: string) => req(`/qc/${token}`, { headers: deviceHeader() }),
   submitQc: (data: any) => req('/qc', { method: 'POST', body: JSON.stringify(data) }),

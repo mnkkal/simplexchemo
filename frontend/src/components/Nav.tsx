@@ -43,7 +43,6 @@ export default function Nav() {
           <>
             <Link href="/pos" className="text-sm opacity-90 hover:opacity-100">POs</Link>
             <Link href="/pos/new" className="text-sm opacity-90 hover:opacity-100">+ New PO</Link>
-            <Link href="/orders" className="text-sm opacity-90 hover:opacity-100">Orders</Link>
             <Link href="/pallet/new" className="text-sm opacity-90 hover:opacity-100">Pack Pallet</Link>
             <Link href="/admin" className="text-sm opacity-90 hover:opacity-100">Admin</Link>
             <span title="Staff session active on this browser" className="rounded bg-green-700 px-2 py-0.5 text-xs">Staff ✓</span>

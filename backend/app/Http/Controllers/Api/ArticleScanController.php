@@ -58,14 +58,16 @@ class ArticleScanController extends Controller
 
     /**
      * Record one QC scan: accepted + rework (re-queue) + scrap (terminal).
-     * Always appends — rework lots are re-scanned until
-     * sum(accepted) + sum(scrap) == order_qty.
+     * Always appends — rework lots are re-scanned until the level target is
+     * covered. The level is chosen by the tester (QC and Air-wash run in
+     * parallel); it defaults to the first incomplete level.
      */
     public function store(Request $request)
     {
         $data = $request->validate([
             'article_token' => 'required|string',
             'department' => 'required|string|max:50',
+            'stage' => 'nullable|in:qc,airwash',
             'qc_checker_code' => 'required|string|max:50',
             'manufacturing_line_no' => 'nullable|string|max:50',
             'production_shift' => 'nullable|string|max:50',
@@ -130,18 +132,21 @@ class ArticleScanController extends Controller
             // the same pending balance (double-count overshoot).
             $line = PoLineItem::whereKey($line->id)->lockForUpdate()->firstOrFail();
 
-            // Two levels, each covering the full order qty: QC first, then
-            // Air-wash from 0. The open level is automatic — no extra tap.
-            $stage = $line->openStage();
-            if ($stage === null) {
+            // Two levels run in parallel, each chosen by the tester; default
+            // is the first incomplete level. Air-wash covers the pool minus
+            // QC-scrapped units (dead bags never reach air-wash).
+            $stage = $data['stage'] ?? $line->openStage();
+            if ($stage === null || !in_array($stage, ['qc', 'airwash'], true)) {
                 abort(422, 'Article complete at both levels (QC + Air-wash). Use Edit to correct a row.');
             }
+            $c = $line->stageCounters($stage);
             $accepted = (int) $line->scans()->where('stage', $stage)->sum('accepted_qty');
             $scrap = (int) $line->scans()->where('stage', $stage)->sum('scrap_qty');
 
-            // Rework is re-queueable so it never consumes the cap; accepted+scrap must fit.
-            if ($accepted + $scrap + $data['accepted_qty'] + $data['scrap_qty'] > $line->order_qty) {
-                abort(422, 'Accepted + scrap would exceed order qty '.$line->order_qty.' at '.($stage === 'qc' ? 'QC' : 'Air-wash').' level (already accepted '.$accepted.', scrap '.$scrap.')');
+            // Rework is re-queueable so it never consumes the cap; accepted+scrap must fit the level target.
+            $target = $c['pending'] + $accepted + $scrap;
+            if ($accepted + $scrap + $data['accepted_qty'] + $data['scrap_qty'] > $target) {
+                abort(422, 'Accepted + scrap would exceed '.($stage === 'qc' ? 'QC' : 'Air-wash').' target '.$target.' (already accepted '.$accepted.', scrap '.$scrap.')');
             }
 
             // Attribution: QC rows carry the submitter as QC tester (+ optional
@@ -255,6 +260,26 @@ class ArticleScanController extends Controller
             $scan->load('lineItem')->toArray(),
             ['counters' => $line->counters(), 'status' => $line->status]
         ));
+    }
+
+    /**
+     * Staff-only: record replacement inflow — fresh units produced for
+     * scrapped ones. Enlarges the testable pool at both levels.
+     */
+    public function addReplacement(Request $request, string $token)
+    {
+        $data = $request->validate(['qty' => 'required|integer|min:1|max:100000']);
+        $line = PoLineItem::where('article_qr_token', $token)->firstOrFail();
+        $line->increment('replacement_qty', $data['qty']);
+        $line->refresh();
+        $line->refreshStatus();
+
+        return response()->json([
+            'replacement_qty' => (int) $line->replacement_qty,
+            'pool_qty' => $line->poolQty(),
+            'counters' => $line->counters(),
+            'status' => $line->status,
+        ]);
     }
 
     private function breakdown(PoLineItem $line, string $column, ?string $stage = null): array

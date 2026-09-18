@@ -59,6 +59,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/article-scans/{scan}', [ArticleScanController::class, 'update']);
     // Staff-only: replacement inflow for scrapped units (heals both levels' pools).
     Route::post('/articles/{token}/replacements', [ArticleScanController::class, 'addReplacement']);
+    // Staff-only: per-article tester assignment (locks each level to its tester).
+    Route::post('/articles/{token}/assignment', [ArticleScanController::class, 'setAssignment']);
     Route::get('/dashboard', [DashboardController::class, 'stats']);
     Route::get('/export', [DashboardController::class, 'export']);
 });

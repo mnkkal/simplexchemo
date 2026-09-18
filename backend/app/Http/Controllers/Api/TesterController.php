@@ -107,6 +107,8 @@ class TesterController extends Controller
                 'counters' => $line->counters(),
                 'article_qr_token' => $line->article_qr_token,
                 'last_line' => $lastLine,
+                'assigned_qc_code' => $line->assigned_qc_code,
+                'assigned_aw_code' => $line->assigned_aw_code,
                 'mine' => $checker->production_line_no
                     && $lastLine
                     && strcasecmp($lastLine, $checker->production_line_no) === 0,

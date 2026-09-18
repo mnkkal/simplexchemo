@@ -13,6 +13,7 @@ class PoLineItem extends Model
     protected $fillable = [
         'purchase_order_id', 'line_number', 'article_no', 'bag_size',
         'order_qty', 'article_qr_token', 'label_exported', 'status',
+        'assigned_qc_code', 'assigned_aw_code',
     ];
 
     protected $casts = [

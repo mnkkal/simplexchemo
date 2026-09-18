@@ -138,7 +138,7 @@ class ArticleScanController extends Controller
 
         $line = PoLineItem::where('article_qr_token', $data['article_token'])->firstOrFail();
 
-        return DB::transaction(function () use ($data, $line, $checker, $airWash) {
+        return DB::transaction(function () use ($data, $line, $checker, $airWash, $staff) {
             // Serialize concurrent tester submissions on this article: lock
             // the row before reading sums so two testers can't both consume
             // the same pending balance (double-count overshoot).
@@ -150,6 +150,16 @@ class ArticleScanController extends Controller
             $stage = $data['stage'] ?? $line->openStage();
             if ($stage === null || !in_array($stage, ['qc', 'airwash'], true)) {
                 abort(422, 'Article complete at both levels (QC + Air-wash). Use Edit to correct a row.');
+            }
+
+            // Per-article assignment: non-staff testers record only where
+            // they are assigned (NULL = open pool). Staff bypasses as admin
+            // override (e.g. corrections, details entry).
+            if (!$staff) {
+                $assigned = $stage === 'airwash' ? $line->assigned_aw_code : $line->assigned_qc_code;
+                if ($assigned && $checker->checker_code !== $assigned) {
+                    abort(422, 'Article assigned to tester '.$assigned.' at '.($stage === 'airwash' ? 'Air-wash' : 'QC').' level');
+                }
             }
             $c = $line->stageCounters($stage);
             $accepted = (int) $line->scans()->where('stage', $stage)->sum('accepted_qty');
@@ -289,6 +299,43 @@ class ArticleScanController extends Controller
         return response()->json([
             'replacement_qty' => (int) $line->replacement_qty,
             'pool_qty' => $line->poolQty(),
+            'counters' => $line->counters(),
+            'status' => $line->status,
+        ]);
+    }
+
+    /**
+     * Staff-only: assign testers to this article (QC and/or Air-wash).
+     * Empty string clears. Only assigned testers may record at that level
+     * (staff bypasses as admin override); NULL keeps the open pool.
+     */
+    public function setAssignment(Request $request, string $token)
+    {
+        $data = $request->validate([
+            'qc_checker_code' => 'nullable|string|max:50',
+            'air_wash_checker_code' => 'nullable|string|max:50',
+        ]);
+        $line = PoLineItem::where('article_qr_token', $token)->firstOrFail();
+        foreach (['qc_checker_code' => 'assigned_qc_code', 'air_wash_checker_code' => 'assigned_aw_code'] as $in => $col) {
+            if (!array_key_exists($in, $data)) {
+                continue;
+            }
+            $code = trim((string) ($data[$in] ?? ''));
+            if ($code === '') {
+                $line->$col = null;
+                continue;
+            }
+            $t = QcChecker::where('checker_code', $code)->where('active', true)->first();
+            if (!$t) {
+                return response()->json(['message' => 'Invalid checker code '.$code.' — create it in Admin → Testers first'], 422);
+            }
+            $line->$col = $t->checker_code;
+        }
+        $line->save();
+
+        return response()->json([
+            'assigned_qc_code' => $line->assigned_qc_code,
+            'assigned_aw_code' => $line->assigned_aw_code,
             'counters' => $line->counters(),
             'status' => $line->status,
         ]);

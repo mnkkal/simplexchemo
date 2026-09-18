@@ -18,6 +18,10 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
   const [code, setCode] = useState('');
   const [testerName, setTesterName] = useState('');
   const [testerSession, setTesterSession] = useState(false);
+  // Article assignment (staff-maintained; persisted per article — never
+  // taken from the device session, so it can't "reset" on its own).
+  const [assignQc, setAssignQc] = useState('');
+  const [assignAw, setAssignAw] = useState('');
   // Tester verdict buttons are visible only after a tester logs in on this
   // device (checker_code in storage). Staff/admin sees production details.
   const [lineNo, setLineNo] = useState('');
@@ -25,7 +29,6 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
   const [prodDate, setProdDate] = useState(new Date().toISOString().slice(0, 10));
   const [unitNo, setUnitNo] = useState('');
   const [supervisor, setSupervisor] = useState('');
-  const [airWashCode, setAirWashCode] = useState('');
   // Tester verdict: quantity (one unit per scan — defaults to 1 so a tap
   // never wipes the whole pending balance) + chosen remark + remark text.
   const [verdictQty, setVerdictQty] = useState(1);
@@ -39,6 +42,8 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
 
   // Remember last-used production details so the next scan opens with the
   // same values prefilled (admin doesn't re-type date/shift/unit/line).
+  // Assignment dropdowns are NOT prefilled from the session or last scan —
+  // they reflect the article's saved assignment (loaded below).
   const prefillFrom = (last: any) => {
     if (!last) return;
     if (last.production_date) setProdDate(String(last.production_date).slice(0, 10));
@@ -47,7 +52,17 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
     if (last.manufacturing_line_no) setLineNo(last.manufacturing_line_no);
     if (last.production_supervisor_name) setSupervisor(last.production_supervisor_name);
     if (last.department) setDept(last.department);
-    if (last.air_wash_checker_code) setAirWashCode(last.air_wash_checker_code);
+  };
+
+  const applyAssignment = (lineItem: any, last: any) => {
+    if (lineItem && (lineItem.assigned_qc_code || lineItem.assigned_aw_code)) {
+      setAssignQc(lineItem.assigned_qc_code || '');
+      setAssignAw(lineItem.assigned_aw_code || '');
+    } else {
+      // No assignment yet: convenience default from the last scan's codes.
+      if (last?.qc_checker_code) setAssignQc(last.qc_checker_code);
+      if (last?.air_wash_checker_code) setAssignAw(last.air_wash_checker_code);
+    }
   };
 
   // Tester isolation (§7): staff sees full history; a tester sees only
@@ -85,6 +100,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
       if (first) {
         const hist = c.history || [];
         prefillFrom(hist[hist.length - 1]);
+        applyAssignment(c.line_item, hist[hist.length - 1]);
         setVerdictQty(1);
         if (c.stage === 'airwash') setStageSel('airwash');
       }
@@ -95,6 +111,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
         if (first) {
           const hist = cached.history || [];
           prefillFrom(hist[hist.length - 1]);
+          applyAssignment((cached as any).line_item, hist[hist.length - 1]);
           setVerdictQty(1);
           if ((cached as any).stage === 'airwash') setStageSel('airwash');
         }
@@ -117,13 +134,11 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
   const basePayload = () => ({
     article_token: token,
     department,
-    qc_checker_code: code.trim(),
     manufacturing_line_no: lineNo || undefined,
     production_shift: shift || undefined,
     production_date: prodDate || undefined,
     production_unit_no: unitNo || undefined,
     production_supervisor_name: supervisor || undefined,
-    air_wash_checker_code: airWashCode.trim() || undefined,
     tested_at: new Date().toISOString(),
   });
 
@@ -161,6 +176,8 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
     const payload = {
       ...basePayload(),
       stage: stageSel,
+      qc_checker_code: code.trim(),
+      air_wash_checker_code: assignAw.trim() || undefined,
       accepted_qty: v === 'pass' ? qty : 0,
       rework_qty: v === 'repair' ? qty : 0,
       scrap_qty: v === 'reject' ? qty : 0,
@@ -185,15 +202,21 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
     }
   };
 
-  // Staff-only: save production details without a verdict (zero quantities).
+  // Staff-only: assign testers + save production details without a verdict
+  // (zero quantities). Assignment persists on the article — the dropdowns
+  // always show the saved assignment, never the device session.
   const saveDetails = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(''); setMsg('');
-    if (!code.trim()) { setErr('Enter a valid tester code — Admin → Testers must create it first.'); return; }
-    const payload = { ...basePayload(), accepted_qty: 0, rework_qty: 0, scrap_qty: 0 };
+    if (!assignQc.trim()) { setErr('Select the assigned QC tester first.'); return; }
+    const payload = { ...basePayload(), qc_checker_code: assignQc.trim(), air_wash_checker_code: assignAw.trim() || undefined, accepted_qty: 0, rework_qty: 0, scrap_qty: 0 };
     try {
+      const li = ctx?.line_item || {};
+      if (assignQc.trim() !== (li.assigned_qc_code || '') || assignAw.trim() !== (li.assigned_aw_code || '')) {
+        await api.setAssignment(token, { qc_checker_code: assignQc.trim(), air_wash_checker_code: assignAw.trim() || null });
+      }
       await api.submitArticleScan(payload);
-      setMsg('Production details saved ✓ (no quantities — tester enters Pass / Repair / Reject).');
+      setMsg('Assignment + production details saved ✓ (no quantities — tester enters Pass / Repair / Reject).');
       await load();
     } catch (ex: any) {
       if (!navigator.onLine || /fetch|network|Failed/i.test(ex.message)) {
@@ -210,6 +233,12 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
   const last: any = (ctx.history || [])[(ctx.history || []).length - 1];
   // Selected testing level drives the verdict form (each level: own balance).
   const sel = stageSel === 'airwash' ? c.airwash : c.qc;
+  // Assignment gate: a tester records only where assigned (per level).
+  // Staff bypasses (admin override); empty assignment = open pool.
+  const stageAssignee = stageSel === 'airwash'
+    ? (ctx.line_item.assigned_aw_code || '')
+    : (ctx.line_item.assigned_qc_code || '');
+  const canRecord = isStaff || !stageAssignee || stageAssignee === code;
 
   return (
     <div className="max-w-2xl space-y-4">
@@ -279,10 +308,15 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
             <input type="number" min={1} max={sel.pending} value={verdictQty} onChange={(e) => setVerdictQty(Number(e.target.value))} className="mt-1 w-full border p-2" />
           </label>
           <div className="grid grid-cols-3 gap-2">
-            <button onClick={() => submitVerdict('pass', '')} className="bg-green-700 px-4 py-3 font-bold text-white">✓ Pass</button>
-            <button onClick={() => { setErr(''); setPendingVerdict('repair'); }} className="bg-amber-600 px-4 py-3 font-bold text-white">Repair</button>
-            <button onClick={() => { setErr(''); setPendingVerdict('reject'); }} className="bg-red-700 px-4 py-3 font-bold text-white">Reject</button>
+            <button disabled={!canRecord} onClick={() => submitVerdict('pass', '')} className="bg-green-700 px-4 py-3 font-bold text-white disabled:opacity-40">✓ Pass</button>
+            <button disabled={!canRecord} onClick={() => { setErr(''); setPendingVerdict('repair'); }} className="bg-amber-600 px-4 py-3 font-bold text-white disabled:opacity-40">Repair</button>
+            <button disabled={!canRecord} onClick={() => { setErr(''); setPendingVerdict('reject'); }} className="bg-red-700 px-4 py-3 font-bold text-white disabled:opacity-40">Reject</button>
           </div>
+          {!canRecord && (
+            <p className="border border-amber-400 bg-amber-50 p-3 text-sm">
+              Assigned to tester <b>{stageAssignee}</b> at {stageSel === 'airwash' ? 'Air-wash' : 'QC'} level — your code ({code || '—'}) can&apos;t record here. <Link href={`/tester?next=/articles/${token}`} className="underline">Switch tester</Link>
+            </p>
+          )}
           {pendingVerdict && (
             <div className="space-y-2 border border-amber-400 bg-amber-50 p-3">
               <p className="text-sm font-bold">Remark required for {pendingVerdict === 'repair' ? 'Repair' : 'Reject'}</p>
@@ -339,32 +373,32 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
                   <option value="qc">QC</option>
                 </select>
               </label>
-              <label className="block text-sm">QC tester code
+              <label className="block text-sm">Assigned QC tester (only they can record QC)
                 {(ctx.testers || []).length > 0 ? (
-                  <select value={code} onChange={(e) => setCode(e.target.value)} className="mt-1 w-full border p-2">
-                    <option value="">— Select tester —</option>
+                  <select value={assignQc} onChange={(e) => setAssignQc(e.target.value)} className="mt-1 w-full border p-2">
+                    <option value="">— Open pool (any tester) —</option>
                     {(ctx.testers || []).map((t: any) => (
                       <option key={t.id} value={t.checker_code}>{t.name} ({t.checker_code})</option>
                     ))}
                   </select>
                 ) : (
-                  <input value={code} onChange={(e) => setCode(e.target.value)} className="mt-1 w-full border p-2" placeholder="e.g. 001" />
+                  <input value={assignQc} onChange={(e) => setAssignQc(e.target.value)} className="mt-1 w-full border p-2" placeholder="e.g. 001" />
                 )}
               </label>
-              <label className="block text-sm">Air-wash checker code
+              <label className="block text-sm">Assigned air-wash tester (only they can record air-wash)
                 {(ctx.testers || []).length > 0 ? (
-                  <select value={airWashCode} onChange={(e) => setAirWashCode(e.target.value)} className="mt-1 w-full border p-2">
-                    <option value="">— None —</option>
+                  <select value={assignAw} onChange={(e) => setAssignAw(e.target.value)} className="mt-1 w-full border p-2">
+                    <option value="">— Open pool (any tester) —</option>
                     {(ctx.testers || []).map((t: any) => (
                       <option key={t.id} value={t.checker_code}>{t.name} ({t.checker_code})</option>
                     ))}
                   </select>
                 ) : (
-                  <input value={airWashCode} onChange={(e) => setAirWashCode(e.target.value)} className="mt-1 w-full border p-2" placeholder="e.g. 002" />
+                  <input value={assignAw} onChange={(e) => setAssignAw(e.target.value)} className="mt-1 w-full border p-2" placeholder="e.g. 002" />
                 )}
               </label>
             </div>
-            <button className="border px-4 py-2">Save details (no quantities)</button>
+            <button className="border px-4 py-2">Save assignment + details (no quantities)</button>
           </form>
         ) : (
           <div className="mt-3">

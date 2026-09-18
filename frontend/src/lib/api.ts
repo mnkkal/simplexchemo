@@ -42,6 +42,7 @@ export const api = {
   submitArticleScan: (data: any) => req('/article-scans', { method: 'POST', body: JSON.stringify(data) }),
   updateArticleScan: (id: number, data: any) => req(`/article-scans/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   addReplacement: (token: string, qty: number) => req(`/articles/${encodeURIComponent(token)}/replacements`, { method: 'POST', body: JSON.stringify({ qty }) }),
+  setAssignment: (token: string, data: { qc_checker_code?: string | null; air_wash_checker_code?: string | null }) => req(`/articles/${encodeURIComponent(token)}/assignment`, { method: 'POST', body: JSON.stringify(data) }),
   // QC
   qcContext: (token: string) => req(`/qc/${token}`, { headers: deviceHeader() }),
   submitQc: (data: any) => req('/qc', { method: 'POST', body: JSON.stringify(data) }),

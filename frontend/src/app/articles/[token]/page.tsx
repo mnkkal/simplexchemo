@@ -237,7 +237,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
           }}
           className="border bg-white p-3 text-sm"
         >
-          <b>Replacement units</b> (fresh bags produced for scrapped ones — enlarges both levels' pools)
+          <b>Replacement units</b> (fresh bags produced for scrapped ones — enlarges both levels&apos; pools)
           <div className="mt-1 flex items-center gap-2">
             <input type="number" min={1} value={replQty} onChange={(e) => setReplQty(Number(e.target.value))} className="w-24 border p-2" />
             <button className="border px-4 py-2">Add</button>

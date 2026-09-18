@@ -1,6 +1,6 @@
 // Minimal offline-first service worker: cache app shell, network-first for API.
 // Bump CACHE on each release so testers never sit on a stale dashboard.
-const CACHE = 'qc-shell-v2';
+const CACHE = 'qc-shell-v3';
 const SHELL = ['/', '/manifest.json'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

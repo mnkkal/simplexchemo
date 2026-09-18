@@ -24,7 +24,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <SyncWatcher />
           {children}
         </AppShell>
-        <script dangerouslySetInnerHTML={{ __html: `if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}))}` }} />
+        {/* Service worker in production only: registering it under `next dev`
+            pins hashed dev chunks in cache and serves stale bundles with 404s. */}
+        {process.env.NODE_ENV === 'production' && (
+          <script dangerouslySetInnerHTML={{ __html: `if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}))}` }} />
+        )}
       </body>
     </html>
   );

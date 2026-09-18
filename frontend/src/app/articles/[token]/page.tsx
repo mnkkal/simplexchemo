@@ -93,6 +93,17 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
     };
   };
 
+  // Level visibility: a tester is offered only their assigned level(s) or
+  // open-pool levels. Staff sees both. The effective level falls back to
+  // the visible tab when the selected one is hidden.
+  const levelAccess = (cc: any) => {
+    const l = cc?.line_item || {};
+    const q = isStaff || !l.assigned_qc_code || l.assigned_qc_code === code;
+    const a = isStaff || !l.assigned_aw_code || l.assigned_aw_code === code;
+    const e = !q && a ? 'airwash' : (!a && q ? 'qc' : stageSel);
+    return { showQc: q, showAw: a, eff: e as 'qc' | 'airwash' };
+  };
+
   const load = async (first = false) => {
     try {
       const c = await api.articleContext(token);
@@ -157,8 +168,9 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
     if (!code.trim()) { setErr('Log in as a tester first.'); return; }
     const qty = Number(verdictQty);
     if (!qty || qty < 1) { setErr('Enter quantity ≥ 1.'); return; }
-    // Live balance of the SELECTED level (a teammate may have recorded).
-    const selOf = (cc: any) => (stageSel === 'airwash' ? cc?.counters?.airwash : cc?.counters?.qc);
+    // Live balance of the EFFECTIVE level (a teammate may have recorded).
+    const { eff } = levelAccess(ctx);
+    const selOf = (cc: any) => (eff === 'airwash' ? cc?.counters?.airwash : cc?.counters?.qc);
     let pending = selOf(ctx)?.pending ?? 0;
     try {
       const live = await api.articleContext(token);
@@ -166,16 +178,16 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
       setCtx(scoped);
       pending = selOf(scoped)?.pending ?? 0;
     } catch { /* offline: fall back to the shown balance */ }
-    if (qty > pending) { setErr(`Only ${pending} pending now at ${stageSel === 'airwash' ? 'Air-wash' : 'QC'} — a teammate just recorded. Quantity adjusted.`); setVerdictQty(Math.max(1, pending)); await load(); return; }
+    if (qty > pending) { setErr(`Only ${pending} pending now at ${eff === 'airwash' ? 'Air-wash' : 'QC'} — a teammate just recorded. Quantity adjusted.`); setVerdictQty(Math.max(1, pending)); await load(); return; }
     if (v !== 'pass' && !remarkText.trim()) { setErr('Add a remark for Repair / Reject.'); return; }
     // Safety: finishing the level balance can't be undone (only staff can
     // correct via Edit) — confirm explicitly.
     if ((v === 'pass' || v === 'reject') && pending > 1 && qty >= pending) {
-      if (!window.confirm(`Record ${qty} and finish ${stageSel === 'airwash' ? 'Air-wash' : 'QC'} (pending becomes 0)? This can't be undone.`)) return;
+      if (!window.confirm(`Record ${qty} and finish ${eff === 'airwash' ? 'Air-wash' : 'QC'} (pending becomes 0)? This can't be undone.`)) return;
     }
     const payload = {
       ...basePayload(),
-      stage: stageSel,
+      stage: eff,
       qc_checker_code: code.trim(),
       air_wash_checker_code: assignAw.trim() || undefined,
       accepted_qty: v === 'pass' ? qty : 0,
@@ -187,8 +199,8 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
       const r = await api.submitArticleScan(payload);
       try { await api.verifyChecker(code.trim()).then((c: any) => { saveChecker(code.trim(), c.device_token, c.name); setTesterName(c.name); setTesterSession(true); }); } catch {}
       const label = v === 'pass' ? 'Pass' : v === 'repair' ? 'Repair' : 'Reject';
-      const rc = stageSel === 'airwash' ? r.counters.airwash : r.counters.qc;
-      setMsg(`Recorded ${label} ${qty} (${stageSel === 'airwash' ? 'Air-wash' : 'QC'}) ✓ Now: accepted ${rc.accepted}, pending ${rc.pending}. Back to scan…`);
+      const rc = eff === 'airwash' ? r.counters.airwash : r.counters.qc;
+      setMsg(`Recorded ${label} ${qty} (${eff === 'airwash' ? 'Air-wash' : 'QC'}) ✓ Now: accepted ${rc.accepted}, pending ${rc.pending}. Back to scan…`);
       setPendingVerdict(null); setRemark('');
       setVerdictQty(1);
       await load();
@@ -232,10 +244,12 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
   const pct = (n: number) => ctx.line_item.order_qty ? Math.round((n / ctx.line_item.order_qty) * 100) : 0;
   const last: any = (ctx.history || [])[(ctx.history || []).length - 1];
   // Selected testing level drives the verdict form (each level: own balance).
-  const sel = stageSel === 'airwash' ? c.airwash : c.qc;
+  // Tabs follow assignment: only own levels and open-pool levels are offered.
+  const { showQc, showAw, eff } = levelAccess(ctx);
+  const sel = eff === 'airwash' ? c.airwash : c.qc;
   // Assignment gate: a tester records only where assigned (per level).
   // Staff bypasses (admin override); empty assignment = open pool.
-  const stageAssignee = stageSel === 'airwash'
+  const stageAssignee = eff === 'airwash'
     ? (ctx.line_item.assigned_aw_code || '')
     : (ctx.line_item.assigned_qc_code || '');
   const canRecord = isStaff || !stageAssignee || stageAssignee === code;
@@ -291,10 +305,11 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
 
       {!c.complete && testerSession && (
         <div className="space-y-3 border bg-white p-4">
-          <h2 className="text-sm font-bold">Tester verdict ({stageSel === 'airwash' ? 'Air-wash' : 'QC'} pending {sel.pending})</h2>
+          <h2 className="text-sm font-bold">Tester verdict ({eff === 'airwash' ? 'Air-wash' : 'QC'} pending {sel.pending})</h2>
           <div className="flex gap-2 text-sm" role="tablist" aria-label="Testing level">
-            <button type="button" onClick={() => { setErr(''); setStageSel('qc'); setVerdictQty(1); }} className={`border px-4 py-2 font-bold ${stageSel === 'qc' ? 'bg-slate-900 text-white' : ''}`}>Level 1 · QC ({c.qc.pending} left)</button>
-            <button type="button" onClick={() => { setErr(''); setStageSel('airwash'); setVerdictQty(1); }} className={`border px-4 py-2 font-bold ${stageSel === 'airwash' ? 'bg-slate-900 text-white' : ''}`}>Level 2 · Air-wash ({c.airwash.pending} left)</button>
+            {showQc && <button type="button" onClick={() => { setErr(''); setStageSel('qc'); setVerdictQty(1); }} className={`border px-4 py-2 font-bold ${eff === 'qc' ? 'bg-slate-900 text-white' : ''}`}>Level 1 · QC ({c.qc.pending} left)</button>}
+            {showAw && <button type="button" onClick={() => { setErr(''); setStageSel('airwash'); setVerdictQty(1); }} className={`border px-4 py-2 font-bold ${eff === 'airwash' ? 'bg-slate-900 text-white' : ''}`}>Level 2 · Air-wash ({c.airwash.pending} left)</button>}
+            {!showQc && !showAw && <p className="text-sm text-slate-600">This article is assigned to other testers — nothing for you here.</p>}
           </div>
           {testerName ? (
             <p className="text-sm">Logged in as <b>{testerName} ({code})</b> · <Link href={`/tester?next=/articles/${token}`} className="underline">switch</Link></p>

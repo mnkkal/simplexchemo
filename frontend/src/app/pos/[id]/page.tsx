@@ -90,6 +90,40 @@ export default function PODetail({ params }: { params: { id: string } }) {
       </Card>
       <Card>
         <CardBody>
+          <CardTitle>Packed pallets ({(po.pallets || []).length})</CardTitle>
+          {(po.pallets || []).length === 0
+            ? <p className="mt-1 text-sm text-slate-500">Nothing packed yet — pack completed articles above.</p>
+            : <div className="mt-3 flex flex-wrap gap-3">
+              {(po.pallets as any[]).map((pl: any) => (
+                <QrLabel
+                  key={pl.id}
+                  token={pl.pallet_qr_token}
+                  title={`${pl.pallet_no} · ${pl.pallet_pcs} pcs`}
+                  lines={[`PO ${pl.purchase_order_no} · ${pl.article_no}`, `${String(pl.packing_date).slice(0, 10)} · Shift ${pl.packing_shift}`]}
+                />
+              ))}
+            </div>}
+        </CardBody>
+      </Card>
+      <Card>
+        <CardBody>
+          <CardTitle>Packed pallets ({(po.pallets || []).length})</CardTitle>
+          {(po.pallets || []).length === 0
+            ? <p className="mt-1 text-sm text-slate-500">Nothing packed yet — pack completed articles above.</p>
+            : <div className="mt-3 flex flex-wrap gap-3">
+              {(po.pallets as any[]).map((pl: any) => (
+                <QrLabel
+                  key={pl.id}
+                  token={pl.pallet_qr_token}
+                  title={`${pl.pallet_no} · ${pl.pallet_pcs} pcs`}
+                  lines={[`PO ${pl.purchase_order_no} · ${pl.article_no}`, `${String(pl.packing_date).slice(0, 10)} · Shift ${pl.packing_shift}`]}
+                />
+              ))}
+            </div>}
+        </CardBody>
+      </Card>
+      <Card>
+        <CardBody>
           <CardTitle>Article QR labels</CardTitle>
           <p className="mt-1 text-sm text-slate-500">1 QR per article (all copies of one label encode the same token).</p>
           <div className="mt-3 flex flex-wrap gap-3">

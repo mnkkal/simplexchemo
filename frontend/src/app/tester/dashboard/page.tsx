@@ -88,12 +88,13 @@ export default function TesterDashboard() {
           <div className="mt-2">
             <TableWrap>
               <table className="w-full">
-                <thead><tr><th className={thCls()}>date</th><th className={thCls()}>PO</th><th className={thCls()}>article</th><th className={thCls()}>role</th><th className={thCls()}>pass</th><th className={thCls()}>repair</th><th className={thCls()}>reject</th><th className={thCls()}>remark</th></tr></thead>
+                <thead><tr><th className={thCls()}>date</th><th className={thCls()}>PO</th><th className={thCls()}>article</th><th className={thCls()}>seq</th><th className={thCls()}>role</th><th className={thCls()}>pass</th><th className={thCls()}>repair</th><th className={thCls()}>reject</th><th className={thCls()}>remark</th></tr></thead>
                 <tbody>{(data.recent || []).map((r: any) => (
                   <tr key={r.id} className="hover:bg-slate-50">
                     <td className={tdCls()}>{String(r.production_date || r.tested_at || '').slice(0, 10)}</td>
                     <td className={tdCls()}>{r.purchase_order_no}</td>
                     <td className={tdCls()}>{r.article_no}</td>
+                    <td className={tdCls()}>{r.serial_no ? `#${r.serial_no}` : '—'}</td>
                     <td className={tdCls()}><Badge tone={r.role === 'Air-wash' ? 'blue' : 'slate'}>{r.role}</Badge></td>
                     <td className={tdCls()}>{r.accepted_qty}</td>
                     <td className={tdCls()}>{r.rework_qty}</td>

@@ -33,6 +33,9 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
   // Tester verdict: quantity (one unit per scan — defaults to 1 so a tap
   // never wipes the whole pending balance) + chosen remark + remark text.
   const [verdictQty, setVerdictQty] = useState(1);
+  // Optional unit serial: when set, the verdict tracks exactly one physical
+  // unit (qty locks to 1).
+  const [serialNo, setSerialNo] = useState('');
   // Testing level picked by the tester — balances are per level.
   const [stageSel, setStageSel] = useState<'qc' | 'airwash'>('qc');
   const [replQty, setReplQty] = useState(1);
@@ -168,7 +171,10 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
   const submitVerdict = async (v: 'pass' | 'repair' | 'reject', remarkText: string) => {
     setErr(''); setMsg('');
     if (!code.trim()) { setErr('Log in as a tester first.'); return; }
-    const qty = Number(verdictQty);
+    const serialSet = serialNo.trim() !== '';
+    const serialNum = serialSet ? Number(serialNo) : undefined;
+    if (serialSet && (!Number.isInteger(serialNum) || (serialNum as number) < 1)) { setErr('Enter a valid unit serial no. (≥ 1).'); return; }
+    const qty = serialSet ? 1 : Number(verdictQty);
     if (!qty || qty < 1) { setErr('Enter quantity ≥ 1.'); return; }
     // Live balance of the EFFECTIVE level (a teammate may have recorded).
     const { eff } = levelAccess(ctx);
@@ -192,6 +198,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
       stage: eff,
       qc_checker_code: code.trim(),
       air_wash_checker_code: assignAw.trim() || undefined,
+      ...(serialSet ? { serial_no: serialNum } : {}),
       accepted_qty: v === 'pass' ? qty : 0,
       rework_qty: v === 'repair' ? qty : 0,
       scrap_qty: v === 'reject' ? qty : 0,
@@ -202,9 +209,10 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
       try { await api.verifyChecker(code.trim()).then((c: any) => { saveChecker(code.trim(), c.device_token, c.name); setTesterName(c.name); setTesterSession(true); }); } catch {}
       const label = v === 'pass' ? 'Pass' : v === 'repair' ? 'Repair' : 'Reject';
       const rc = eff === 'airwash' ? r.counters.airwash : r.counters.qc;
-      setMsg(`Recorded ${label} ${qty} (${eff === 'airwash' ? 'Air-wash' : 'QC'}) ✓ Now: accepted ${rc.accepted}, pending ${rc.pending}. Back to scan…`);
+      setMsg(`Recorded ${label} ${qty} (${eff === 'airwash' ? 'Air-wash' : 'QC'})${serialSet ? ` · unit #${serialNum}` : ''} ✓ Now: accepted ${rc.accepted}, pending ${rc.pending}. Back to scan…`);
       setPendingVerdict(null); setRemark('');
       setVerdictQty(1);
+      setSerialNo('');
       await load();
       backToScan();
     } catch (ex: any) {
@@ -332,8 +340,11 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
               <Link href={`/tester?next=/articles/${token}`} className="ml-2 underline underline-offset-2">Tester login</Link>
             </p>
           )}
+          <label className="block text-sm font-medium text-slate-700">Unit serial no. (optional — one unit per scan)
+            <input type="number" min={1} value={serialNo} onChange={(e) => { setSerialNo(e.target.value); if (e.target.value.trim() !== '') setVerdictQty(1); }} className={inputCls('mt-1')} placeholder="e.g. 23" />
+          </label>
           <label className="block text-sm font-medium text-slate-700">Quantity (max {sel.pending})
-            <input type="number" min={1} max={sel.pending} value={verdictQty} onChange={(e) => setVerdictQty(Number(e.target.value))} className="mt-1 w-full rounded-md border border-slate-300 p-2 text-base" />
+            <input type="number" min={1} max={sel.pending} value={serialNo.trim() !== '' ? 1 : verdictQty} disabled={serialNo.trim() !== ''} onChange={(e) => setVerdictQty(Number(e.target.value))} className="mt-1 w-full rounded-md border border-slate-300 p-2 text-base disabled:bg-slate-50" />
           </label>
           <div className="grid grid-cols-3 gap-2">
             <button disabled={!canRecord} onClick={() => submitVerdict('pass', '')} className="rounded-md bg-green-700 px-4 py-3 font-bold text-white shadow-sm hover:bg-green-600 disabled:opacity-40">✓ Pass</button>
@@ -459,7 +470,7 @@ export default function ArticleQC({ params }: { params: { token: string } }) {
         <CardBody className="text-sm">
           <b>History (never overwritten):</b>
           {(ctx.history || []).map((h: any) => (
-            <div key={h.id} className="border-b border-slate-100 py-1.5 last:border-0">[{((h.stage || 'qc') === 'airwash' ? 'AW' : 'QC')}][{h.department}]{h.production_date ? ` ${String(h.production_date).slice(0, 10)}` : ''} ✓{h.accepted_qty} RW{h.rework_qty} S{h.scrap_qty} — QC {h.qc_checker_code}{h.air_wash_checker_code ? ` · Air-wash ${h.air_wash_checker_code}` : ''}{h.manufacturing_line_no ? ` · Line ${h.manufacturing_line_no}` : ''}{h.production_unit_no ? ` · Unit ${h.production_unit_no}` : ''}{h.production_shift ? ` · Shift ${h.production_shift}` : ''}{h.production_supervisor_name ? ` · Sup ${h.production_supervisor_name}` : ''}{h.notes ? ` · “${h.notes}”` : ''}
+            <div key={h.id} className="border-b border-slate-100 py-1.5 last:border-0">[{((h.stage || 'qc') === 'airwash' ? 'AW' : 'QC')}][{h.department}]{h.serial_no ? ` · #${h.serial_no}` : ''}{h.production_date ? ` ${String(h.production_date).slice(0, 10)}` : ''} ✓{h.accepted_qty} RW{h.rework_qty} S{h.scrap_qty} — QC {h.qc_checker_code}{h.air_wash_checker_code ? ` · Air-wash ${h.air_wash_checker_code}` : ''}{h.manufacturing_line_no ? ` · Line ${h.manufacturing_line_no}` : ''}{h.production_unit_no ? ` · Unit ${h.production_unit_no}` : ''}{h.production_shift ? ` · Shift ${h.production_shift}` : ''}{h.production_supervisor_name ? ` · Sup ${h.production_supervisor_name}` : ''}{h.notes ? ` · “${h.notes}”` : ''}
               {isStaff && (
                 <button onClick={() => setEditing({ ...h, production_date: String(h.production_date || '').slice(0, 10) })} className="ml-2 rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50">Edit</button>
               )}

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Pallet;
 use App\Models\PoLineItem;
 use App\Models\PurchaseOrder;
 use Illuminate\Http\Request;
@@ -63,7 +64,11 @@ class PurchaseOrderController extends Controller
             ['counters' => $line->counters()]
         ));
 
-        return response()->json(array_merge($po->toArray(), ['line_items' => $lines]));
+        // Pallets packed from this PO (visible + reprintable after creation).
+        $pallets = Pallet::where('purchase_order_no', $po->purchase_order_no)
+            ->with('articleLines')->orderBy('id')->get();
+
+        return response()->json(array_merge($po->toArray(), ['line_items' => $lines, 'pallets' => $pallets]));
     }
 
     /** Label-supplier export: 1 row per article QR + mark exported (reprint-safe). */

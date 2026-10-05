@@ -3,7 +3,48 @@ import { useEffect, useState } from 'react';
 import { CheckCircle2, Clock } from 'lucide-react';
 import { api } from '@/lib/api';
 import { cacheSet, cacheGet } from '@/lib/offline';
-import { Card, CardBody } from '@/components/ui';
+import { Card, CardBody, StatusBadge, btnSecondary, inputCls } from '@/components/ui';
+
+/** "Enter seq no." popup: single-unit entries for this article QR. */
+function SerialLookup({ token }: { token: string }) {
+  const [serial, setSerial] = useState('');
+  const [res, setRes] = useState<any>(null);
+  const [err, setErr] = useState('');
+  const go = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr(''); setRes(null);
+    const n = Number(serial);
+    if (!Number.isInteger(n) || n < 1) { setErr('Enter a valid seq no. (≥ 1).'); return; }
+    try {
+      setRes(await api.serialLookup(token, n));
+    } catch (ex: any) { setErr(ex.message); }
+  };
+  return (
+    <Card>
+      <CardBody>
+        <b className="text-sm">Check a single unit</b>
+        <form onSubmit={go} className="mt-2 flex gap-2">
+          <input value={serial} onChange={(e) => setSerial(e.target.value)} placeholder="Seq no. e.g. 23" inputMode="numeric" className={inputCls()} />
+          <button className={btnSecondary('!text-sm')}>Show</button>
+        </form>
+        {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
+        {res && (
+          <div className="mt-3 border-t border-slate-100 pt-2 text-sm">
+            <b>Unit #{res.serial_no}</b> · {res.article_no} · PO {res.purchase_order_no}
+            <div className="mt-1">QC ✓{res.qc.accepted} RW{res.qc.rework} S{res.qc.scrap} <span className="text-slate-500">({(res.qc.by || []).join(', ') || 'untested'})</span></div>
+            <div>Air-wash ✓{res.airwash.accepted} RW{res.airwash.rework} S{res.airwash.scrap} <span className="text-slate-500">({(res.airwash.by || []).join(', ') || 'untested'})</span></div>
+            {(res.rows || []).map((h: any) => (
+              <div key={h.id} className="border-b border-slate-100 py-1 text-xs last:border-0">
+                [{((h.stage || 'qc') === 'airwash' ? 'AW' : 'QC')}] ✓{h.accepted_qty} RW{h.rework_qty} S{h.scrap_qty} — {h.qc_checker_code}{h.air_wash_checker_code ? ` · AW ${h.air_wash_checker_code}` : ''}{h.notes ? ` · “${h.notes}”` : ''}
+              </div>
+            ))}
+            {(res.rows || []).length === 0 && <p className="mt-1 text-slate-500">No test entry recorded for this unit yet.</p>}
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
 
 export default function ScanView({ params }: { params: { token: string } }) {
   const token = decodeURIComponent(params.token);
@@ -38,6 +79,7 @@ export default function ScanView({ params }: { params: { token: string } }) {
           <h1 className="mt-2 text-xl font-bold text-slate-900">{data.qc_passed ? 'Article Complete' : 'In Quality Process'}</h1>
           <div className="mt-3 space-y-1 text-sm text-slate-600">Customer: {o.customer_name}<br />PO: {o.purchase_order_no}<br />Article: {o.article_no}<br />Size: {o.bag_size} · Qty: {o.order_qty}</div>
           <div className="mt-2 text-sm">Accepted: {c.accepted ?? 0} · Scrap: {c.scrap ?? 0} · Pending: {c.pending ?? 0} · Status: {data.status}</div>
+          <div className="mt-3 text-left"><SerialLookup token={token} /></div>
           {err && <p className="mt-2 text-xs text-amber-700">{err}</p>}
         </CardBody>
       </Card>
@@ -57,6 +99,7 @@ export default function ScanView({ params }: { params: { token: string } }) {
             <a href={`/articles/${token}`} className="mt-3 inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-700">Open article QC entry</a>
           </CardBody>
         </Card>
+        <SerialLookup token={token} />
       </div>
     );
   }
@@ -122,6 +165,24 @@ export default function ScanView({ params }: { params: { token: string } }) {
                 [{((h.stage || 'qc') === 'airwash' ? 'AW' : 'QC')}] ✓{h.accepted_qty} RW{h.rework_qty} S{h.scrap_qty} — QC {h.qc_checker_code}{h.air_wash_checker_code ? ` · AW ${h.air_wash_checker_code}` : ''}{h.notes ? ` · “${h.notes}”` : ''}
               </div>
             ))}
+            {(l.units || []).length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs font-bold text-slate-600">Unit-wise seq. nos ({l.units.length}) — tap to expand</summary>
+                <div className="mt-1 overflow-x-auto rounded border border-slate-200">
+                  <table className="w-full text-xs">
+                    <thead><tr className="bg-slate-50"><th className="border-b px-2 py-1 text-left font-semibold text-slate-500">seq</th><th className="border-b px-2 py-1 text-left font-semibold text-slate-500">status</th><th className="border-b px-2 py-1 text-left font-semibold text-slate-500">QC by</th><th className="border-b px-2 py-1 text-left font-semibold text-slate-500">AW by</th></tr></thead>
+                    <tbody>{l.units.map((u: any) => (
+                      <tr key={u.serial} className="border-b border-slate-100 last:border-0">
+                        <td className="px-2 py-1 font-semibold">#{u.serial}</td>
+                        <td className="px-2 py-1"><StatusBadge status={u.status} /></td>
+                        <td className="px-2 py-1">{(u.qc_by || []).join(', ') || '—'}</td>
+                        <td className="px-2 py-1">{(u.aw_by || []).join(', ') || '—'}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              </details>
+            )}
           </CardBody>
         </Card>
       ))}

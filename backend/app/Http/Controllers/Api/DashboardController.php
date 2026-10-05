@@ -146,6 +146,7 @@ class DashboardController extends Controller
                 'line_number' => $s->lineItem?->line_number,
                 'department' => $s->department,
                 'stage' => $s->stage ?? 'qc',
+                'serial_no' => $s->serial_no,
                 'production_date' => $s->production_date,
                 'production_shift' => $s->production_shift,
                 'production_unit_no' => $s->production_unit_no,

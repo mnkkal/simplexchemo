@@ -10,7 +10,7 @@ class ArticleScan extends Model
     use HasFactory;
 
     protected $fillable = [
-        'po_line_item_id', 'department', 'stage',
+        'po_line_item_id', 'department', 'stage', 'serial_no',
         'qc_checker_code', 'qc_checker_name',
         'manufacturing_line_no', 'production_shift',
         'production_date', 'production_unit_no', 'production_supervisor_name',

@@ -61,6 +61,45 @@ class ArticleScanController extends Controller
     }
 
     /**
+     * Single-unit view: all rows for one serial of an article, latest last.
+     * Same viewer rules as context (staff full, tester own rows, anonymous
+     * summary only). Used by the "enter seq no." popup on product QR scan.
+     */
+    public function serial(Request $request, string $token, int $serial)
+    {
+        $line = PoLineItem::where('article_qr_token', $token)->with('purchaseOrder')->firstOrFail();
+        $rows = ArticleScan::where('po_line_item_id', $line->id)
+            ->where('serial_no', $serial)->orderBy('id')->get();
+
+        [$staff, $checker] = $this->resolveViewer($request);
+        if (!$staff && $checker) {
+            $rows = $rows->filter(fn ($s) => ($s->stage ?? 'qc') === 'airwash'
+                ? $s->air_wash_checker_code === $checker->checker_code
+                : $s->qc_checker_code === $checker->checker_code)->values();
+        }
+
+        $sum = fn ($stage) => [
+            'accepted' => (int) $rows->where('stage', $stage)->sum('accepted_qty'),
+            'rework' => (int) $rows->where('stage', $stage)->sum('rework_qty'),
+            'scrap' => (int) $rows->where('stage', $stage)->sum('scrap_qty'),
+            'by' => $rows->where('stage', $stage)->map(fn ($s) => $stage === 'airwash'
+                ? ($s->air_wash_checker_name ?: $s->air_wash_checker_code)
+                : ($s->qc_checker_name ?: $s->qc_checker_code))->filter()->unique()->values(),
+        ];
+
+        return response()->json([
+            'serial_no' => $serial,
+            'article_no' => $line->article_no,
+            'bag_size' => $line->bag_size,
+            'purchase_order_no' => $line->purchaseOrder?->purchase_order_no,
+            'customer_name' => $line->purchaseOrder?->customer_name,
+            'qc' => $sum('qc'),
+            'airwash' => $sum('airwash'),
+            'rows' => ($staff || $checker) ? $rows : [],
+        ]);
+    }
+
+    /**
      * Record one QC scan: accepted + rework (re-queue) + scrap (terminal).
      * Always appends — rework lots are re-scanned until the level target is
      * covered. The level is chosen by the tester (QC and Air-wash run in
@@ -83,6 +122,7 @@ class ArticleScanController extends Controller
             'accepted_qty' => 'required|integer|min:0|max:100000',
             'rework_qty' => 'required|integer|min:0|max:100000',
             'scrap_qty' => 'required|integer|min:0|max:100000',
+            'serial_no' => 'nullable|integer|min:1|max:100000',
             'notes' => 'nullable|string',
             'client_uuid' => 'nullable|string|max:64',
             'tested_at' => 'nullable|date',
@@ -101,6 +141,12 @@ class ArticleScanController extends Controller
             || !empty($data['notes']);
         if (($data['accepted_qty'] + $data['rework_qty'] + $data['scrap_qty']) < 1 && !$hasDetails) {
             return response()->json(['message' => 'Enter quantities or production details'], 422);
+        }
+
+        // A serial-tagged scan tracks exactly one physical unit.
+        if (!empty($data['serial_no'])
+            && ($data['accepted_qty'] + $data['rework_qty'] + $data['scrap_qty']) !== 1) {
+            return response()->json(['message' => 'Serial-tagged scan tracks one unit — quantities must total exactly 1'], 422);
         }
 
         if (!empty($data['client_uuid'])) {
@@ -183,6 +229,7 @@ class ArticleScanController extends Controller
                 'po_line_item_id' => $line->id,
                 'department' => $data['department'],
                 'stage' => $stage,
+                'serial_no' => $data['serial_no'] ?? null,
                 'qc_checker_code' => $checker->checker_code,
                 'qc_checker_name' => $checker->name,
                 'manufacturing_line_no' => $data['manufacturing_line_no'] ?? null,
@@ -229,6 +276,7 @@ class ArticleScanController extends Controller
             'accepted_qty' => 'sometimes|required|integer|min:0|max:100000',
             'rework_qty' => 'sometimes|required|integer|min:0|max:100000',
             'scrap_qty' => 'sometimes|required|integer|min:0|max:100000',
+            'serial_no' => 'nullable|integer|min:1|max:100000',
             'notes' => 'nullable|string',
         ]);
 
@@ -255,6 +303,10 @@ class ArticleScanController extends Controller
                 $scan->air_wash_checker_code = $airWash->checker_code;
                 $scan->air_wash_checker_name = $airWash->name;
             }
+        }
+
+        if (array_key_exists('serial_no', $data)) {
+            $scan->serial_no = $data['serial_no'] ?? null;
         }
 
         foreach (['department', 'manufacturing_line_no', 'production_shift', 'production_date', 'production_unit_no', 'production_supervisor_name', 'notes'] as $f) {

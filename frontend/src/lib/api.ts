@@ -39,6 +39,7 @@ export const api = {
   poLabels: (id: string) => req(`/purchase-orders/${id}/labels`, { method: 'POST' }),
   // Article QC (accepted / rework / scrap counts per scan)
   articleContext: (token: string) => req(`/articles/${token}`, { headers: deviceHeader() }),
+  serialLookup: (token: string, serial: number) => req(`/articles/${encodeURIComponent(token)}/serial/${serial}`, { headers: deviceHeader() }),
   submitArticleScan: (data: any) => req('/article-scans', { method: 'POST', body: JSON.stringify(data) }),
   updateArticleScan: (id: number, data: any) => req(`/article-scans/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   addReplacement: (token: string, qty: number) => req(`/articles/${encodeURIComponent(token)}/replacements`, { method: 'POST', body: JSON.stringify({ qty }) }),
@@ -67,10 +68,34 @@ export const api = {
   exportData: () => req('/export'),
   // Auth
   login: (email: string, password: string) => req('/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  // Housekeeping board
+  hkMeta: () => req('/hk/meta'),
+  hkDiary: (params: { line_no?: string; from?: string; to?: string }) => {
+    const q = new URLSearchParams();
+    if (params.line_no) q.set('line_no', params.line_no);
+    if (params.from) q.set('from', params.from);
+    if (params.to) q.set('to', params.to);
+    const s = q.toString();
+    return req(`/hk/diary${s ? `?${s}` : ''}`);
+  },
+  hkEntryCreate: (data: any) => req('/hk/entries', { method: 'POST', body: JSON.stringify(data) }),
+  // Multipart (photos): no JSON content-type so the browser sets the boundary.
+  hkInspectCreate: async (fd: FormData) => {
+    const res = await fetch(`${API}/hk/inspections`, { method: 'POST', body: fd, headers: { Accept: 'application/json', ...authHeaders(), ...deviceHeader() } });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || `Request failed (${res.status})`);
+    }
+    return res.json();
+  },
 };
 
 export function scanUrl(token: string) {
   return `${APP}/scan/${token}`;
+}
+
+export function hkUrl(line: string) {
+  return `${APP}/hk/${encodeURIComponent(line)}`;
 }
 
 export function qrApiUrl(token: string) {

@@ -90,7 +90,8 @@ class ScanController extends Controller
             $passed = $pallet->units->where('status', 'passed')->count();
 
             // New article flow: every packed article with order details,
-            // both QC levels, and (staff) full scan history.
+            // both QC levels, and (staff) full scan history — plus a
+            // per-serial unit summary (which seq. no. tested by whom).
             $lines = $pallet->articleLines->map(function ($l) use ($isStaff) {
                 $c = $l->counters();
                 $row = [
@@ -103,6 +104,7 @@ class ScanController extends Controller
                     'qc' => $c['qc'],
                     'airwash' => $c['airwash'],
                     'complete' => $c['complete'],
+                    'units' => $this->serialSummary($l, $isStaff),
                 ];
                 if ($isStaff) {
                     $row['history'] = $l->scans;
@@ -142,5 +144,41 @@ class ScanController extends Controller
         }
 
         return response()->json(['message' => 'QR token not found'], 404);
+    }
+
+    /**
+     * Per-unit summary for one article: every seq. no. 1..pool with its
+     * testers and state (latest row wins per serial). Full range for sane
+     * pools; scanned-only beyond 2000 units.
+     */
+    private function serialSummary(PoLineItem $line, bool $isStaff): array
+    {
+        $pool = $line->poolQty();
+        $bySerial = $line->scans->groupBy('serial_no');
+        $scanned = $bySerial->keys()->filter(fn ($s) => $s !== null && $s !== '')->map(fn ($s) => (int) $s)->all();
+        $range = $pool <= 2000 ? range(1, max(1, $pool)) : [];
+        $serials = collect(array_merge($range, $scanned))->unique()->sort()->values();
+
+        return $serials->map(function ($s) use ($bySerial, $isStaff) {
+            $rows = $bySerial->has($s) ? $bySerial[$s]->values() : collect();
+            $qcAcc = (int) $rows->where('stage', 'qc')->sum('accepted_qty');
+            $qcScr = (int) $rows->where('stage', 'qc')->sum('scrap_qty');
+            $awAcc = (int) $rows->where('stage', 'airwash')->sum('accepted_qty');
+            $awScr = (int) $rows->where('stage', 'airwash')->sum('scrap_qty');
+            $status = $rows->isEmpty() ? 'pending'
+                : (($qcScr + $awScr) > 0 ? 'scrap'
+                : (($qcAcc + $awAcc) > 0 ? 'pass' : 'in_progress'));
+            $unit = [
+                'serial' => $s,
+                'status' => $status,
+                'qc_by' => $rows->where('stage', 'qc')->map(fn ($r) => $r->qc_checker_name ?: $r->qc_checker_code)->filter()->unique()->values(),
+                'aw_by' => $rows->where('stage', 'airwash')->map(fn ($r) => $r->air_wash_checker_name ?: $r->air_wash_checker_code)->filter()->unique()->values(),
+            ];
+            if ($isStaff) {
+                $unit['rows'] = $rows;
+            }
+
+            return $unit;
+        })->values()->all();
     }
 }

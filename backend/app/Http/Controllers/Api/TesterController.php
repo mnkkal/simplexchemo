@@ -68,6 +68,7 @@ class TesterController extends Controller
             'recent' => $scans->map(fn ($s) => [
                 'id' => $s->id,
                 'stage' => $s->stage ?? 'qc',
+                'serial_no' => $s->serial_no,
                 'production_date' => $s->production_date,
                 'purchase_order_no' => $s->lineItem?->purchaseOrder?->purchase_order_no,
                 'article_no' => $s->lineItem?->article_no,

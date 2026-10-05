@@ -13,6 +13,7 @@ import {
   Package,
   PanelLeftClose,
   QrCode,
+  SprayCan,
   UserRound,
   UsersRound,
   X,
@@ -20,7 +21,7 @@ import {
 import { clearChecker } from '@/lib/checker';
 
 function isPublicPath(p: string) {
-  return p === '/' || p.startsWith('/scan/');
+  return p === '/' || p.startsWith('/scan/') || p.startsWith('/hk/');
 }
 
 const TITLES: [RegExp, string][] = [
@@ -32,6 +33,8 @@ const TITLES: [RegExp, string][] = [
   [/^\/tester\/dashboard/, 'My Work'],
   [/^\/tester$/, 'Tester Login'],
   [/^\/login$/, 'Staff Login'],
+  [/^\/hk\/view/, 'Housekeeping Viewer'],
+  [/^\/hk\//, 'Housekeeping'],
   [/^\/articles\//, 'Article QC'],
   [/^\/qc\//, 'QC Entry'],
   [/^\/orders/, 'Orders (Legacy)'],
@@ -50,6 +53,7 @@ const STAFF_NAV: NavItem[] = [
   { href: '/pallet/new', label: 'Pack Pallet', icon: Package },
   { href: '/admin#testers', label: 'Testers', icon: UsersRound },
   { href: '/admin#export', label: 'Reports', icon: BarChart3 },
+  { href: '/hk/view', label: 'Housekeeping', icon: SprayCan },
 ];
 
 const TESTER_NAV: NavItem[] = [

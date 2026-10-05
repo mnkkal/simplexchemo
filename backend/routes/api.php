@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\ArticleScanController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CheckerController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\HkController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PalletController;
 use App\Http\Controllers\Api\PurchaseOrderController;
@@ -28,7 +29,15 @@ Route::post('/checkers/verify', [CheckerController::class, 'verify']);
 Route::post('/qc', [QcController::class, 'store']);
 Route::get('/qc/{token}', [QcController::class, 'context']);
 Route::get('/articles/{token}', [ArticleScanController::class, 'context']);
+Route::get('/articles/{token}/serial/{serial}', [ArticleScanController::class, 'serial']);
 Route::post('/article-scans', [ArticleScanController::class, 'store']);
+
+// Housekeeping board: floor endpoints public by design (shared line
+// devices, sweeper/inspector names as identity); corrections need staff.
+Route::get('/hk/meta', [HkController::class, 'meta']);
+Route::get('/hk/diary', [HkController::class, 'diary']);
+Route::post('/hk/entries', [HkController::class, 'storeEntry']);
+Route::post('/hk/inspections', [HkController::class, 'storeInspection']);
 
 // Staff auth (back-office order entry / admin).
 Route::post('/login', [AuthController::class, 'login']);
@@ -61,6 +70,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/articles/{token}/replacements', [ArticleScanController::class, 'addReplacement']);
     // Staff-only: per-article tester assignment (locks each level to its tester).
     Route::post('/articles/{token}/assignment', [ArticleScanController::class, 'setAssignment']);
+    // Staff-only: housekeeping corrections (floor submits are public).
+    Route::post('/hk/entries/{entry}', [HkController::class, 'updateEntry']);
+    Route::post('/hk/inspections/{inspection}', [HkController::class, 'updateInspection']);
     Route::get('/dashboard', [DashboardController::class, 'stats']);
     Route::get('/export', [DashboardController::class, 'export']);
 });

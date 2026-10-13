@@ -17,6 +17,29 @@ function iso(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** "1-12", "1, 2, L3" → ["1", ..., "12"] (max 100, order preserved). */
+function parseLines(input: string): string[] {
+  const out: string[] = [];
+  for (const part of input.split(',')) {
+    const t = part.trim();
+    if (!t) continue;
+    const m = t.match(/^(\d+)\s*-\s*(\d+)$/);
+    if (m) {
+      const a = Number(m[1]);
+      const b = Number(m[2]);
+      if (b >= a && b - a <= 200) {
+        for (let n = a; n <= b && out.length < 100; n++) {
+          const s = String(n);
+          if (!out.includes(s)) out.push(s);
+        }
+        continue;
+      }
+    }
+    if (!out.includes(t) && out.length < 100) out.push(t);
+  }
+  return out;
+}
+
 function ViewerInner() {
   const params = useSearchParams();
   const [line, setLine] = useState(params.get('line') || '');
@@ -116,17 +139,24 @@ function ViewerInner() {
 
       <Card>
         <CardBody>
-          <b className="text-sm">Print line QR (post one in front of each line)</b>
+          <b className="text-sm">Print line QRs (post one in front of each line)</b>
+          <p className="mt-1 text-xs text-slate-500">Comma-separated lines and ranges, e.g. <code>1-12</code> or <code>1, 2, L3</code>.</p>
           <div className="mt-2 flex gap-2">
-            <input value={qrLine} onChange={(e) => setQrLine(e.target.value)} placeholder="Line no. e.g. 2" className={inputCls('max-w-xs')} />
+            <input value={qrLine} onChange={(e) => setQrLine(e.target.value)} placeholder="e.g. 1-12" className={inputCls('max-w-xs')} />
           </div>
-          {qrLine.trim() && (
-            <div className="mt-3 inline-block rounded-lg border border-slate-200 p-4 text-center">
-              <div className="text-sm font-bold">Line {qrLine.trim()} · Housekeeping</div>
-              <QRCodeSVG value={hkUrl(qrLine.trim())} size={160} className="mx-auto my-2" />
-              <div className="max-w-[220px] break-all text-[10px] text-slate-400">{hkUrl(qrLine.trim())}</div>
-              <button onClick={() => window.print()} className={`${btnSecondary('!py-1 !text-sm')} mt-2 print:hidden`}><Printer size={14} /> Print</button>
+          {parseLines(qrLine).length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-3">
+              {parseLines(qrLine).map((ln) => (
+                <div key={ln} className="inline-block rounded-lg border border-slate-200 p-4 text-center print:break-inside-avoid">
+                  <div className="text-sm font-bold">Line {ln} · Housekeeping</div>
+                  <QRCodeSVG value={hkUrl(ln)} size={160} className="mx-auto my-2" />
+                  <div className="max-w-[220px] break-all text-[10px] text-slate-400">{hkUrl(ln)}</div>
+                </div>
+              ))}
             </div>
+          )}
+          {parseLines(qrLine).length > 0 && (
+            <button onClick={() => window.print()} className={`${btnSecondary('!py-1 !text-sm')} mt-3 print:hidden`}><Printer size={14} /> Print all ({parseLines(qrLine).length})</button>
           )}
         </CardBody>
       </Card>

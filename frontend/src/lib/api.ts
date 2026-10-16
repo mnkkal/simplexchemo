@@ -1,4 +1,10 @@
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+// Same-origin proxy (see next.config.mjs rewrites). Browser never talks
+// cross-origin, so no CORS preflight and no Hostinger edge-404 on /api/*.
+// Override with NEXT_PUBLIC_API_URL only for local dev if needed.
+const API = process.env.NEXT_PUBLIC_API_URL?.includes('curvemetrics.in/api') &&
+  !process.env.NEXT_PUBLIC_API_URL.includes('index.php')
+  ? process.env.NEXT_PUBLIC_API_URL.replace('curvemetrics.in/api', 'curvemetrics.in/index.php/api')
+  : (process.env.NEXT_PUBLIC_API_URL || '/backend-api');
 const APP = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
 function authHeaders(): HeadersInit {
@@ -14,11 +20,17 @@ function deviceHeader(): HeadersInit {
 }
 
 async function req(path: string, init?: RequestInit) {
+  const hasBody = init?.body !== undefined && init?.body !== null;
   const res = await fetch(`${API}${path}`, {
     ...init,
+    // Bearer/device-token auth (no cookies) -> must stay `omit`. `include`
+    // breaks against `Access-Control-Allow-Origin: *` on the backend.
+    credentials: 'omit',
     // Device token rides on every call when present, so offline-synced
     // verdicts also authenticate as the tester on retry.
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...authHeaders(), ...deviceHeader(), ...(init?.headers || {}) },
+    // Only send JSON Content-Type when there is a body: sending it on GET
+    // forces an unnecessary CORS preflight.
+    headers: { Accept: 'application/json', ...(hasBody ? { 'Content-Type': 'application/json' } : {}), ...authHeaders(), ...deviceHeader(), ...(init?.headers || {}) },
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -81,7 +93,7 @@ export const api = {
   hkEntryCreate: (data: any) => req('/hk/entries', { method: 'POST', body: JSON.stringify(data) }),
   // Multipart (photos): no JSON content-type so the browser sets the boundary.
   hkInspectCreate: async (fd: FormData) => {
-    const res = await fetch(`${API}/hk/inspections`, { method: 'POST', body: fd, headers: { Accept: 'application/json', ...authHeaders(), ...deviceHeader() } });
+    const res = await fetch(`${API}/hk/inspections`, { method: 'POST', body: fd, credentials: 'omit', headers: { Accept: 'application/json', ...authHeaders(), ...deviceHeader() } });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.message || `Request failed (${res.status})`);
